@@ -1,0 +1,26 @@
+<!-- SelectCasesPage.html -->
+
+{% extends "global/Page.html" %}
+{% load static %}
+
+{% block title %}
+    Select Cases
+{% endblock %}
+
+{% block content %}
+    <form method="post">
+        {% csrf_token %}
+        <p>Select cases to work on:</p>
+        {% if cases %}
+            {% for case in cases %}
+                <input type="checkbox" name="cases" value="{{ case.id }}">
+                Case {{ case.case_id }} - Points: {{ case.points }}<br>
+            {% endfor %}
+            <br>
+            <button type="submit">Submit</button>
+        {% else %}
+            <p>No available cases at this time.</p>
+            <button type="submit">Continue</button>
+        {% endif %}
+    </form>
+{% endblock %}

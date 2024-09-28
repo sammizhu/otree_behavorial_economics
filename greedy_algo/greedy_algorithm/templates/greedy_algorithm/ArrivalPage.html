@@ -1,0 +1,22 @@
+<!-- ArrivalPage.html -->
+
+{% extends "global/Page.html" %}
+{% load static %}
+
+{% block title %}
+    Arrival
+{% endblock %}
+
+{% block content %}
+    {% if arrived %}
+        <p>You have arrived at time {{ round_number }}.</p>
+        <p>You will now proceed to select cases.</p>
+    {% else %}
+        <p>You did not arrive at time {{ round_number }}.</p>
+        <p>Please wait for the next round.</p>
+    {% endif %}
+    <form method="post">
+        {% csrf_token %}
+        <button type="submit">Continue</button>
+    </form>
+{% endblock %}
