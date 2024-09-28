@@ -1,5 +1,3 @@
-# pages.py
-
 from otree.api import Page, WaitPage
 from .models import Constants, Case
 import random

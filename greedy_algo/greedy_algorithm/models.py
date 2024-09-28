@@ -1,14 +1,12 @@
-# models.py
-
 from otree.api import (
     models, widgets, BaseConstants, BaseSubsession, BaseGroup, BasePlayer, ExtraModel
 )
 import random
 
-author = 'Your Name'
+author = 'sz'
 
 doc = """
-An oTree app modeling the greedy algorithm where judges select cases based on associated points.
+Modeling greedy algorithm where judges select cases based on associated points.
 """
 
 class Constants(BaseConstants):
@@ -19,7 +17,6 @@ class Constants(BaseConstants):
 class Subsession(BaseSubsession):
     def creating_session(self):
         if self.round_number == 1:
-            # Initialize cases
             cases = []
 
             # Create initial cases
