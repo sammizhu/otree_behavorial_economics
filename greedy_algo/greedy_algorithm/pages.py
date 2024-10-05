@@ -1,5 +1,5 @@
 from otree.api import Page
-from .models import Constants, Case
+from .models import Constants, Case, Judge
 import json
 import random
 
@@ -19,7 +19,6 @@ class ArrivalPage(Page):
             'arrived': self.player.arrived,
             'round_number': self.subsession.round_number
         }
-
 
 class SelectCasesPage(Page):
     form_model = 'player'
@@ -45,32 +44,64 @@ class SelectCasesPage(Page):
         }
 
     def before_next_page(self):
-        # Safely check if `selected_case_ids` is not None and not an empty string
-        if self.player.selected_case_ids is not None and self.player.selected_case_ids != '':
-            chosen_case_ids = [int(cid) for cid in json.loads(self.player.selected_case_ids)]
-            # Use `Case.id.in_(chosen_case_ids)` for filtering
-            for case in Case.objects_filter(subsession=self.subsession).filter(Case.id.in_(chosen_case_ids)):
-                case.is_assigned = True
-                case.save()
-            # Remove assigned cases from the available cases list
-            self.session.vars['cases'] = [
-                cid for cid in self.session.vars['cases']
-                if cid not in chosen_case_ids
-            ]
-        else:
-            self.player.selected_case_ids = json.dumps([])  # Set an empty list as default if not set
+            # Check if `selected_case_ids` is not None and not an empty string
+            if self.player.selected_case_ids is not None and self.player.selected_case_ids != '':
+                # Ensure the string is in a JSON array format
+                if not self.player.selected_case_ids.startswith("["):
+                    # If not in array format, wrap it in square brackets
+                    self.player.selected_case_ids = f"[{self.player.selected_case_ids}]"
+                
+                # Convert the JSON string to a list of case IDs
+                self.player.selected_cases_list = [int(cid) for cid in json.loads(self.player.selected_case_ids)]
+                print("HEREHERHEEHRER", self.player.selected_cases_list)
+                # Fetch the current judge for this player
+                current_judge_list = Judge.filter(subsession=self.subsession, player=self.player)
+                current_judge = current_judge_list[0] if current_judge_list else None
+                
+                # Assign the selected cases to this judge
+                for case_id in self.player.selected_cases_list:
+                    case = Case.filter(subsession=self.subsession, id=case_id)[0]
+                    print("blah blah", case)
+                    case.is_assigned = True
+                    case.judge = current_judge
 
+                # Remove assigned cases from the session list
+                self.session.vars['cases'] = [cid for cid in self.session.vars['cases'] if cid not in self.player.selected_cases_list]
+            else:
+                self.player.selected_cases_list = []  # Set an empty list if no cases are s
 
 class ResultsPage(Page):
     def is_displayed(self):
         return self.player.arrived
 
     def vars_for_template(self):
-        # Load selected cases
-        selected_case_ids = json.loads(self.player.selected_case_ids or '[]')
-        selected_cases = [Case.get(subsession=self.subsession, id=int(case_id)) for case_id in selected_case_ids]
+        # Retrieve the judge associated with the current player
+        all_cases = Case.filter(subsession=self.subsession)
+
+        current_judge_list = Judge.filter(subsession=self.subsession, player=self.player)
+        current_judge = current_judge_list[0] if current_judge_list else None
+
+        # If no judge is found, set to None (or handle as appropriate)
+        if not current_judge:
+            return {
+                'selected_cases': [],
+                'round_number': self.subsession.round_number,
+                'arrived': self.player.arrived
+            }
+
+        # Fetch cases assigned to this specific judge using the relationship comparison
+        selected_cases = Case.filter(subsession=self.subsession, judge=current_judge)
+
+        # Convert the cases to a list of dictionaries for compatibility with HTML templates
+        case_list = [
+            {'id': case.id, 'case_id': case.case_id, 'points': case.points, 'judge_id': case.judge.judge_id}
+            for case in selected_cases
+        ]
+
         return {
-            'selected_cases': selected_cases,
+            'all cases': all_cases,
+            'judge': current_judge,
+            'selected_cases': case_list,  # Pass the formatted list of selected cases
             'round_number': self.subsession.round_number,
             'arrived': self.player.arrived
         }
