@@ -1,5 +1,3 @@
-<!-- ResultsPage.html -->
-
 {% extends "global/Page.html" %}
 {% load static %}
 
@@ -19,7 +17,6 @@
         <p>You did not select any cases.</p>
     {% endif %}
     <form method="post">
-        {% csrf_token %}
         <button type="submit">Continue</button>
     </form>
 {% endblock %}

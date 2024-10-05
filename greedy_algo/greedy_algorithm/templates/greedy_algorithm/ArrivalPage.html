@@ -1,5 +1,3 @@
-<!-- ArrivalPage.html -->
-
 {% extends "global/Page.html" %}
 {% load static %}
 
@@ -16,7 +14,6 @@
         <p>Please wait for the next round.</p>
     {% endif %}
     <form method="post">
-        {% csrf_token %}
         <button type="submit">Continue</button>
     </form>
 {% endblock %}
