@@ -32,11 +32,16 @@ class SelectCasesPage(Page):
     def vars_for_template(self):
         # Use session vars to filter available cases
         available_case_ids = self.session.vars.get('cases', [])
-        # Use SQLAlchemy's `in_` function for list-based filtering
-        cases = Case.objects_filter(subsession=self.subsession, is_assigned=False).filter(Case.id.in_(available_case_ids))
+        # Fetch only cases matching the specified IDs and not assigned
+        cases =  cases = Case.filter(subsession=self.subsession, is_assigned=False)
+
+        # Convert to a list of dictionaries for compatibility with the HTML template
+        case_list = [{'id': case.id, 'case_id': case.case_id, 'points': case.points} for case in cases]
+
         return {
-            'cases': cases,
-            'round_number': self.subsession.round_number  # Pass the round_number to the template
+            'cases': case_list,
+            'round_number': self.subsession.round_number,
+            'arrived': self.player.arrived
         }
 
     def before_next_page(self):
@@ -54,7 +59,6 @@ class SelectCasesPage(Page):
             ]
         else:
             self.player.selected_case_ids = json.dumps([])  # Set an empty list as default if not set
-
 
 
 class ResultsPage(Page):
