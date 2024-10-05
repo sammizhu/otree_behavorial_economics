@@ -2,6 +2,7 @@ from otree.api import (
     models, widgets, BaseConstants, BaseSubsession, BaseGroup, BasePlayer, ExtraModel
 )
 import random
+import json
 
 class Constants(BaseConstants):
     name_in_url = 'greedy_algorithm'
@@ -51,8 +52,9 @@ class Group(BaseGroup):
 
 class Player(BasePlayer):
     arrived = models.BooleanField(initial=False)
-    selected_case_ids = models.LongStringField(blank=True)  # Store as JSON string
+    selected_case_ids = models.LongStringField(blank=True)
 
+    @property
     def selected_cases_list(self):
         """
         Convert the JSON string into a list of integers.
@@ -61,6 +63,14 @@ class Player(BasePlayer):
         if self.selected_case_ids:
             return json.loads(self.selected_case_ids)
         return []
+
+    @selected_cases_list.setter
+    def selected_cases_list(self, value):
+        """
+        Setter to update selected_case_ids when `selected_cases_list` is assigned.
+        Expects `value` to be a list of integers.
+        """
+        self.selected_case_ids = json.dumps(value)
 
 class Judge(ExtraModel):
     subsession = models.Link(Subsession)

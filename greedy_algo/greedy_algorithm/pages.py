@@ -44,31 +44,35 @@ class SelectCasesPage(Page):
         }
 
     def before_next_page(self):
-            # Check if `selected_case_ids` is not None and not an empty string
-            if self.player.selected_case_ids is not None and self.player.selected_case_ids != '':
-                # Ensure the string is in a JSON array format
-                if not self.player.selected_case_ids.startswith("["):
-                    # If not in array format, wrap it in square brackets
-                    self.player.selected_case_ids = f"[{self.player.selected_case_ids}]"
-                
-                # Convert the JSON string to a list of case IDs
-                self.player.selected_cases_list = [int(cid) for cid in json.loads(self.player.selected_case_ids)]
-                print("HEREHERHEEHRER", self.player.selected_cases_list)
-                # Fetch the current judge for this player
-                current_judge_list = Judge.filter(subsession=self.subsession, player=self.player)
-                current_judge = current_judge_list[0] if current_judge_list else None
-                
-                # Assign the selected cases to this judge
-                for case_id in self.player.selected_cases_list:
-                    case = Case.filter(subsession=self.subsession, id=case_id)[0]
-                    print("blah blah", case)
-                    case.is_assigned = True
-                    case.judge = current_judge
+        # Print raw form data to debug
+        raw_data = self._form_data.getlist('selected_case_ids[]')
+        self.player.selected_case_ids = json.dumps(raw_data)
+        self.player.selected_cases_list = [int(case_id) for case_id in raw_data]
+        
+        # Check if `selected_case_ids` is not None and not an empty string
+        if self.player.selected_case_ids and self.player.selected_case_ids != '':
+            # Ensure the string is in a JSON array format
+            if not self.player.selected_case_ids.startswith("["):
+                self.player.selected_case_ids = f'["{self.player.selected_case_ids}"]'
 
-                # Remove assigned cases from the session list
-                self.session.vars['cases'] = [cid for cid in self.session.vars['cases'] if cid not in self.player.selected_cases_list]
-            else:
-                self.player.selected_cases_list = []  # Set an empty list if no cases are s
+            # Convert the JSON string to a list of case IDs
+            self.player.selected_cases_list = [int(cid) for cid in json.loads(self.player.selected_case_ids)]
+
+            # Fetch the current judge for this player
+            current_judge_list = Judge.filter(subsession=self.subsession, player=self.player)
+            current_judge = current_judge_list[0] if current_judge_list else None
+
+            # Assign the selected cases to this judge
+            for case_id in self.player.selected_cases_list:
+                # Use the first element from the filter result
+                case = Case.filter(subsession=self.subsession, id=case_id)[0]
+                case.is_assigned = True
+                case.judge = current_judge
+
+            # Remove assigned cases from the session list
+            self.session.vars['cases'] = [cid for cid in self.session.vars['cases'] if cid not in self.player.selected_cases_list]
+        else:
+            self.player.selected_cases_list = [] 
 
 class ResultsPage(Page):
     def is_displayed(self):
