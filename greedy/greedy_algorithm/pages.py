@@ -13,13 +13,15 @@ class ArrivalPage(Page):
         Simulates the arrival of a judge. Always displayed to update arrival status.
         """
         self.player.arrived = True
-        return True
+        return True  # Always display to update arrival status
 
     def vars_for_template(self):
         """
         Provides variables for the HTML template, including available unassigned cases.
         """
+        # Fetch unassigned cases for the current session
         cases = Case.filter(session=self.session, is_assigned=False)
+
         return {
             'cases': cases,
             'arrived': self.player.arrived,
@@ -33,50 +35,54 @@ class SelectCasesPage(Page):
     form_model = 'player'
     form_fields = ['selected_case_ids']
 
+    form_model = 'player'
+    form_fields = ['selected_case_ids']
+
     def is_displayed(self):
-        """
-        Only display this page if the judge has arrived.
-        """
+        # Only display if the judge has arrived
         return self.player.arrived
 
     def vars_for_template(self):
-        """
-        Provides variables for the template, including available cases.
-        Ensures there are at least 5 cases available each round.
-        """
+        # Fetch case IDs from session vars
         case_ids = self.session.vars.get('cases', [])
-        cases = []
 
-        # Update points for unassigned cases
+        # Retrieve all case objects and increment points for unassigned ones
+        cases = []
         for case_id in case_ids:
             matching_cases = Case.filter(session=self.session, id=case_id)
             if matching_cases:
                 case = matching_cases[0]
                 if not case.is_assigned:
-                    case.points += 1
+                    case.points += 1  # Increment points for unassigned cases
                 cases.append(case)
 
-        # Find the highest existing case ID
+        # Retrieve the highest existing case ID across all cases
         all_cases = Case.filter(session=self.session)
-        max_case_id = max((case.case_id for case in all_cases), default=0)
+        if all_cases:
+            max_case_id = max(case.case_id for case in all_cases)
+        else:
+            max_case_id = 0
 
-        # Ensure a minimum of 5 unassigned cases
+        # Ensure there are 5 available cases
         needed_cases = 5 - len([case for case in cases if not case.is_assigned])
+
         new_cases = [
             Case.create(
                 session=self.session,
-                case_id=max_case_id + i + 1,
+                case_id=max_case_id + i + 1,  # Ensure case IDs are sequential
                 points=random.randint(1, 10),
                 is_assigned=False
             )
             for i in range(needed_cases)
         ]
 
+        # Add new cases to the list and update session vars
         cases.extend(new_cases)
         self.session.vars['cases'] = [case.id for case in cases]
 
-        # Prepare case data for template rendering
+        # Convert cases to dictionaries for template rendering
         case_list = [{'id': case.id, 'case_id': case.case_id, 'points': case.points} for case in cases]
+
         return {
             'cases': case_list,
             'round_number': self.subsession.round_number,
@@ -89,26 +95,32 @@ class SelectCasesPage(Page):
         """
         raw_data = self._form_data.getlist('selected_case_ids[]')
         self.player.selected_case_ids = json.dumps(raw_data)
+        self.player.selected_cases_list = [int(case_id) for case_id in raw_data]
+        
+        # Check if `selected_case_ids` is not None and not an empty string
+        if self.player.selected_case_ids and self.player.selected_case_ids != '':
+            # Ensure the string is in a JSON array format
+            if not self.player.selected_case_ids.startswith("["):
+                self.player.selected_case_ids = f'["{self.player.selected_case_ids}"]'
 
-        if raw_data:
-            self.player.selected_cases_list = [int(cid) for cid in raw_data]
+            # Convert the JSON string to a list of case IDs
+            self.player.selected_cases_list = [int(cid) for cid in json.loads(self.player.selected_case_ids)]
 
             # Fetch the current judge for this player
-            current_judge = Judge.filter(session=self.session, player=self.player).first()
+            current_judge_list = Judge.filter(session=self.session, player=self.player)
+            current_judge = current_judge_list[0] if current_judge_list else None
 
-            # Assign selected cases to the judge
+            # Assign the selected cases to this judge
             for case_id in self.player.selected_cases_list:
-                case = Case.filter(session=self.session, id=case_id).first()
+                # Use the first element from the filter result
+                case = Case.filter(session=self.session, id=case_id)[0]
                 case.is_assigned = True
                 case.judge = current_judge
 
-            # Remove assigned cases from session variables
-            self.session.vars['cases'] = [
-                cid for cid in self.session.vars['cases'] 
-                if cid not in self.player.selected_cases_list
-            ]
+            # Remove assigned cases from the session list
+            self.session.vars['cases'] = [cid for cid in self.session.vars['cases'] if cid not in self.player.selected_cases_list]
         else:
-            self.player.selected_cases_list = []
+            self.player.selected_cases_list = [] 
 
 class ResultsPage(Page):
     """
@@ -125,8 +137,14 @@ class ResultsPage(Page):
         """
         Provides the selected cases and judge information for the template.
         """
+        # Retrieve the judge associated with the current player
         all_cases = Case.filter(session=self.session)
-        current_judge = Judge.filter(session=self.session, player=self.player).first()
+
+        current_judges = Judge.filter(session=self.session, player=self.player)
+        if current_judges:
+            current_judge = current_judges[0]
+        else:
+            current_judge = None
 
         if not current_judge:
             return {
@@ -135,7 +153,10 @@ class ResultsPage(Page):
                 'arrived': self.player.arrived
             }
 
+        # Fetch cases assigned to this specific judge
         selected_cases = Case.filter(session=self.session, judge=current_judge)
+
+        # Convert the cases to a list of dictionaries for compatibility with HTML templates
         case_list = [
             {'id': case.id, 'case_id': case.case_id, 'points': case.points, 'judge_id': case.judge.judge_id}
             for case in selected_cases
@@ -164,14 +185,22 @@ class GameSummaryPage(Page):
         """
         Provides a summary of all judges and their assigned cases for the template.
         """
+        # Fetch all judges from the session
         judges = Judge.filter(session=self.session)
-        judge_stats = []
 
-        # Collect statistics for each judge
+        # Collect stats for each judge
+        judge_stats = []
         for judge in judges:
             assigned_cases = Case.filter(session=self.session, judge=judge)
-            case_data = [{'case_id': case.case_id, 'points': case.points} for case in assigned_cases]
-            total_points = sum(case.points for case in assigned_cases)
+
+            # Collect case information
+            case_data = [
+                {'case_id': case.case_id, 'points': case.points}
+                for case in assigned_cases
+            ]
+
+            # Calculate total points assigned to this judge
+            total_points = sum(case.points for case in assigned_cases)  # Use dot notation
 
             judge_stats.append({
                 'judge_id': judge.judge_id,
@@ -179,9 +208,6 @@ class GameSummaryPage(Page):
                 'assigned_cases': case_data,
                 'total_points': total_points
             })
-
-        # Debug: Print summary stats
-        print(f"Game Summary Stats: {judge_stats}")
 
         return {'judge_stats': judge_stats}
 

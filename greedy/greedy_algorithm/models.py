@@ -24,40 +24,39 @@ class Subsession(BaseSubsession):
         Cases are created only in the first round, while unassigned cases carry over in subsequent rounds.
         Judges are created for each player at every round.
         """
-        # Initialize an empty list to hold cases
         cases = []
 
+        # Create cases only in the first round
         if self.round_number == 1:
-            # Create 5 cases only in the first round
             for i in range(5):
                 case = Case.create(
-                    session=self.session,  # Corrected: use session to link models
-                    case_id=i + 1,  # Unique ID for each case
-                    points=random.randint(1, 10),  # Assign random points
-                    is_assigned=False  # Initially, cases are unassigned
+                    session=self.session,  # Corrected: use session, not subsession
+                    case_id=i + 1,
+                    points=random.randint(1, 10),
+                    is_assigned=False
                 )
                 cases.append(case)
 
-            # Store created case IDs in session variables
+            # Save case IDs in session vars
             self.session.vars['cases'] = [case.id for case in cases]
         else:
-            # For later rounds, carry over unassigned cases from the previous rounds
+            # Carry over unassigned cases from previous rounds
             cases = Case.filter(session=self.session)
             self.session.vars['cases'] = [
                 case.id for case in cases if not case.is_assigned
             ]
 
-        # Create a new judge for each player in the current round
+        # Create a new judge for each player for the current round
         judges = []
         for player in self.get_players():
             judge = Judge.create(
-                session=self.session,  # Link judge with the session
-                player=player,  # Associate judge with a player
-                judge_id=player.id + (self.round_number - 1) * 100  # Ensure unique judge ID per round
+                session=self.session,  # Corrected: use session, not subsession
+                player=player,
+                judge_id=player.id + (self.round_number - 1) * 100
             )
             judges.append(judge)
 
-        # Store judge IDs for the current round in session variables
+        # Store judge IDs in session vars
         self.session.vars[f'judges_round_{self.round_number}'] = [judge.id for judge in judges]
 
 class Group(BaseGroup):
