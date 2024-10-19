@@ -8,7 +8,7 @@ from otree.models import Session  # Import Session model
 class Constants(BaseConstants):
     name_in_url = 'greedy_algorithm'
     players_per_group = None
-    num_rounds = 10  # Simulate 10 time periods
+    num_rounds = 2  # Simulate 10 time periods
 
 class Subsession(BaseSubsession):
     def creating_session(self):
@@ -43,14 +43,10 @@ class Subsession(BaseSubsession):
                 judge_id=player.id + (self.round_number - 1) * 100
             )
             judges.append(judge)
-            print(f"Created Judge {judge.judge_id} for Player {player.id} in Round {self.round_number}")
 
         # Store judge IDs in session vars
         self.session.vars[f'judges_round_{self.round_number}'] = [judge.id for judge in judges]
 
-        # Debug: Print available cases and judges for the round
-        print(f"Round {self.round_number} - Available Cases: {self.session.vars['cases']}")
-        print(f"Round {self.round_number} - Judges: {[judge.judge_id for judge in judges]}")
             
 class Group(BaseGroup):
     pass
@@ -67,7 +63,6 @@ class Player(BasePlayer):
 
     @selected_cases_list.setter
     def selected_cases_list(self, value):
-        print(f"Setting selected cases for Player {self.id}: {value}")
         self.selected_case_ids = json.dumps(value)
 
 class Judge(ExtraModel):
