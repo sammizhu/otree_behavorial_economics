@@ -57,6 +57,7 @@ class SelectCasesPage(Page):
 
                 # Fetch the current judge for this player
                 current_judge_list = Judge.filter(session=self.session, player=self.player)
+                print(current_judge_list)
                 current_judge = current_judge_list[0] if current_judge_list else None
 
                 # Assign the selected cases to this judge

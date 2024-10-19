@@ -12,33 +12,46 @@ class Constants(BaseConstants):
 
 class Subsession(BaseSubsession):
     def creating_session(self):
-        if self.round_number == 1:
-            cases = []
-            judges = []
+        cases = []
 
-            # Create initial cases
+        # Create cases only in the first round
+        if self.round_number == 1:
             for i in range(5):
                 case = Case.create(
-                    session=self.session,  # Link case to the session
+                    session=self.session,  # Corrected: use session, not subsession
                     case_id=i + 1,
                     points=random.randint(1, 10),
                     is_assigned=False
                 )
                 cases.append(case)
 
-            # Create judges for each player in the first round and link to the player
-            for player in self.get_players():
-                judge = Judge.create(
-                    session=self.session,  # Link judge to the session
-                    player=player,         # Link judge to the current player
-                    judge_id=player.id
-                )
-                judges.append(judge)
-
-            # Save case IDs in session.vars (optional)
+            # Save case IDs in session vars
             self.session.vars['cases'] = [case.id for case in cases]
-            self.session.vars['judges'] = [judge.id for judge in judges]
+        else:
+            # Carry over unassigned cases from previous rounds
+            cases = Case.filter(session=self.session)
+            self.session.vars['cases'] = [
+                case.id for case in cases if not case.is_assigned
+            ]
 
+        # Create a new judge for each player for the current round
+        judges = []
+        for player in self.get_players():
+            judge = Judge.create(
+                session=self.session,  # Corrected: use session, not subsession
+                player=player,
+                judge_id=player.id + (self.round_number - 1) * 100
+            )
+            judges.append(judge)
+            print(f"Created Judge {judge.judge_id} for Player {player.id} in Round {self.round_number}")
+
+        # Store judge IDs in session vars
+        self.session.vars[f'judges_round_{self.round_number}'] = [judge.id for judge in judges]
+
+        # Debug: Print available cases and judges for the round
+        print(f"Round {self.round_number} - Available Cases: {self.session.vars['cases']}")
+        print(f"Round {self.round_number} - Judges: {[judge.judge_id for judge in judges]}")
+            
 class Group(BaseGroup):
     pass
 
@@ -54,16 +67,17 @@ class Player(BasePlayer):
 
     @selected_cases_list.setter
     def selected_cases_list(self, value):
+        print(f"Setting selected cases for Player {self.id}: {value}")
         self.selected_case_ids = json.dumps(value)
 
 class Judge(ExtraModel):
     session = models.Link(Session)
+    player = models.Link(Player)  # Associate judge with player
     judge_id = models.IntegerField()
-    player = models.Link(Player)
 
 class Case(ExtraModel):
-    session = models.Link(Session)  # Use Session class, not string
-    judge = models.Link(Judge)      # Use Judge class, not string
+    session = models.Link(Session)
     case_id = models.IntegerField()
-    points = models.IntegerField(default=0)
-    is_assigned = models.BooleanField(default=False)
+    points = models.IntegerField()
+    is_assigned = models.BooleanField(default=False)  # Track case assignment
+    judge = models.Link(Judge)  # Track assigned judge
