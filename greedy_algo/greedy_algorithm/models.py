@@ -3,6 +3,7 @@ from otree.api import (
 )
 import random
 import json
+from otree.models import Session  # Import Session model
 
 class Constants(BaseConstants):
     name_in_url = 'greedy_algorithm'
@@ -18,7 +19,7 @@ class Subsession(BaseSubsession):
             # Create initial cases
             for i in range(5):
                 case = Case.create(
-                    subsession=self,
+                    session=self.session,  # Link case to the session
                     case_id=i + 1,
                     points=random.randint(1, 10),
                     is_assigned=False
@@ -28,23 +29,14 @@ class Subsession(BaseSubsession):
             # Create judges for each player in the first round and link to the player
             for player in self.get_players():
                 judge = Judge.create(
-                    subsession=self,
-                    player=player,  # Link judge to the current player
-                    judge_id=player.id  # Use player's id as judge_id
+                    session=self.session,  # Link judge to the session
+                    player=player,         # Link judge to the current player
+                    judge_id=player.id
                 )
                 judges.append(judge)
 
-            # Save case IDs in session.vars
+            # Save case IDs in session.vars (optional)
             self.session.vars['cases'] = [case.id for case in cases]
-            self.session.vars['judges'] = [judge.id for judge in judges]
-
-        else:
-            # Carry over unassigned cases to the next round
-            cases = Case.filter(subsession=self)
-            self.session.vars['cases'] = [case.id for case in cases if not case.is_assigned]
-
-            # Carry over existing judges to the next round
-            judges = Judge.filter(subsession=self)
             self.session.vars['judges'] = [judge.id for judge in judges]
 
 class Group(BaseGroup):
@@ -56,30 +48,22 @@ class Player(BasePlayer):
 
     @property
     def selected_cases_list(self):
-        """
-        Convert the JSON string into a list of integers.
-        Returns an empty list if the string is blank.
-        """
         if self.selected_case_ids:
             return json.loads(self.selected_case_ids)
         return []
 
     @selected_cases_list.setter
     def selected_cases_list(self, value):
-        """
-        Setter to update selected_case_ids when `selected_cases_list` is assigned.
-        Expects `value` to be a list of integers.
-        """
         self.selected_case_ids = json.dumps(value)
 
 class Judge(ExtraModel):
-    subsession = models.Link(Subsession)
+    session = models.Link(Session)
     judge_id = models.IntegerField()
-    player = models.Link(Player)  # Link each judge to a Player
+    player = models.Link(Player)
 
 class Case(ExtraModel):
-    subsession = models.Link(Subsession)  # Link this case to a specific subsession
-    judge = models.Link(Judge)  # Make the link optional by using `default=None`
-    case_id = models.IntegerField()  # Unique ID for each case
-    points = models.IntegerField(default=0)  # Points associated with the case
-    is_assigned = models.BooleanField(default=False)  # Whether the case has been assigned to a judge
+    session = models.Link(Session)  # Use Session class, not string
+    judge = models.Link(Judge)      # Use Judge class, not string
+    case_id = models.IntegerField()
+    points = models.IntegerField(default=0)
+    is_assigned = models.BooleanField(default=False)
