@@ -1,0 +1,14 @@
+{% block content %}
+<h1> Arrived</h1>
+{{ if arrived }}
+    <p>You have arrived at time {{ round_number }}.</p>
+    <p>You will now proceed to select cases.</p>
+{{ else }}
+    <p>You did not arrive at time {{ round_number }}.</p>
+    <p>Please wait for the next round.</p>
+{{ endif }}
+
+<form method="post">
+    {{ next_button }}
+</form>
+{% endblock %}

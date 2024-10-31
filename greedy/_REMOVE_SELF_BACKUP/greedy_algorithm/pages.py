@@ -85,7 +85,7 @@ class GameSummaryPage(Page):
 
     def is_displayed(self):
         # Only display on the last round
-        return self.round_number == Constants.num_rounds
+        return self.round_number == C.NUM_ROUNDS
 
     def vars_for_template(self):
         judges = Judge.filter(session=self.session)

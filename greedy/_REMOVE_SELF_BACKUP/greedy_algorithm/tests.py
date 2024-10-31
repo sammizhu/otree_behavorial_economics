@@ -1,4 +1,4 @@
-from otree.api import Currency as cu, currency_range  # Import currency utilities
+from otree.api import Currency as c, currency_range  # Import currency utilities
 from . import *  # Import all models and constants from the current app
 from otree.api import Bot  # Import Bot class for automated testing
 
