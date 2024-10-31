@@ -9,32 +9,31 @@ class Constants(BaseConstants):
     num_rounds = 1
 
 class Subsession(BaseSubsession):
-    print("Subsession class loaded")  # Debug statement
+    pass
 
-    def creating_session(self):
-        print("Running creating_session...")  # Debug statement
-        # Create 5 cases at the start of the session if they don't exist yet
-        if not self.session.vars.get('cases'):
-            cases = [
-                Case.create(
-                    session_id=self.session.id,
-                    case_id=i + 1,
-                    points=random.randint(1, 10),
-                    is_assigned=False
-                ) for i in range(5)
-            ]
-            self.session.vars['cases'] = [case.id for case in cases]
+def creating_session(subsession: Subsession):
+    # Create 5 cases at the start of the session if they don't exist yet
+    if not subsession.session.vars.get('cases'):
+        cases = [
+            Case.create(
+                session_id=subsession.session.id,
+                case_id=i + 1,
+                points=random.randint(1, 10),
+                is_assigned=False
+            ) for i in range(5)
+        ]
+        subsession.session.vars['cases'] = [case.id for case in cases]
 
-        # Create a judge for each player if not already created
-        if not self.session.vars.get('judges'):
-            judges = [
-                Judge.create(
-                    session_id=self.session.id,
-                    player_id=player.id,
-                    judge_id=player.id_in_group
-                ) for player in self.get_players()
-            ]
-            self.session.vars['judges'] = [judge.id for judge in judges]
+    # Create a judge for each player if not already created
+    if not subsession.session.vars.get('judges'):
+        judges = [
+            Judge.create(
+                session_id=subsession.session.id,
+                player_id=player.id,
+                judge_id=player.id_in_group
+            ) for player in subsession.get_players()
+        ]
+        subsession.session.vars['judges'] = [judge.id for judge in judges]
 
 class Group(BaseGroup):
     pass
@@ -44,12 +43,12 @@ class Player(BasePlayer):
     selected_case_ids = models.LongStringField(blank=True, default='[]')
 
     @property
-    def selected_cases_list(player):
-        return json.loads(player.selected_case_ids)
+    def selected_cases_list(self):
+        return json.loads(self.selected_case_ids)
 
     @selected_cases_list.setter
-    def selected_cases_list(player, value):
-        player.selected_case_ids = json.dumps(value)
+    def selected_cases_list(self, value):
+        self.selected_case_ids = json.dumps(value)
 
 class Case(ExtraModel):
     session_id = models.IntegerField()
@@ -68,7 +67,6 @@ def live_method(player, data):
     action = data.get('action')
 
     if action == 'load':
-        # Fetch cases that belong to the current session using the 'session_id'
         cases = Case.objects_filter(session_id=player.session.id)
         case_list = [
             {
@@ -98,24 +96,46 @@ def live_method(player, data):
 
         case = case_list[0]
         if not case.is_assigned:
-            judge = Judge.objects_filter(session_id=player.session.id, player_id=player.id)[0]
-            case.judge_id = judge.id
-            case.is_assigned = True
-            player.selected_cases_list.append(case_id)
+            judge = Judge.objects_filter(session_id=player.session.id, player_id=player.id).first()
+            if judge:
+                case.judge_id = judge.id
+                case.is_assigned = True
 
-            return {0: {'action': 'case_selected', 'case_id': case_id}}
+                selected_cases = player.selected_cases_list
+                selected_cases.append(case_id)
+                player.selected_cases_list = selected_cases
+
+                return {0: {'action': 'case_selected', 'case_id': case_id}}
 
         return {player.id_in_group: {'action': 'case_unavailable', 'case_id': case_id}}
 
-def vars_for_template(player):
-    session = player.session
-    judge = next((Judge.objects_get(id=judge_id) for judge_id in session.vars.get('judges', []) if Judge.objects_get(id=judge_id).player_id == player.id), None)
-    selected_cases = [Case.objects_get(id=case_id) for case_id in session.vars.get('cases', []) if Case.objects_get(id=case_id).judge_id == judge.id] if judge else []
+def results_vars_for_template(player):
+    selected_cases = [
+        Case.objects_filter(id=case_id).first()
+        for case_id in player.selected_cases_list
+    ]
     return dict(selected_cases=selected_cases, round_number=player.subsession.round_number)
 
-def is_displayed(player):
-    player.arrived = True
-    return True
+def summary_vars_for_template(player):
+    judges = Judge.objects_filter(session_id=player.session.id)
+    judge_stats = []
+
+    for judge in judges:
+        assigned_cases = Case.objects_filter(session_id=player.session.id, judge_id=judge.id)
+        total_points = sum(case.points for case in assigned_cases)
+
+        # Only include judges with assigned cases (total_points > 0)
+        if total_points > 0:
+            judge_stats.append({
+                'judge_id': judge.judge_id,
+                'player_id': judge.player_id,
+                'assigned_cases': [
+                    {'case_id': case.case_id, 'points': case.points} for case in assigned_cases
+                ],
+                'total_points': total_points
+            })
+
+    return {'judge_stats': judge_stats}
 
 # PAGES
 class ArrivalPage(Page):
@@ -137,7 +157,7 @@ class SelectCasesPage(Page):
 class ResultsPage(Page):
     @staticmethod
     def vars_for_template(player):
-        return vars_for_template(player)
+        return results_vars_for_template(player)
 
 class GameSummaryPage(Page):
     @staticmethod
@@ -146,21 +166,6 @@ class GameSummaryPage(Page):
 
     @staticmethod
     def vars_for_template(player):
-        session = player.session
-        judges = [Judge.objects_get(id=judge_id) for judge_id in session.vars.get('judges', [])]
-        judge_stats = []
-
-        for judge in judges:
-            assigned_cases = [Case.objects_get(id=case_id) for case_id in session.vars.get('cases', []) if Case.objects_get(id=case_id).judge_id == judge.id]
-            total_points = sum(case.points for case in assigned_cases)
-
-            judge_stats.append({
-                'judge_id': judge.judge_id,
-                'player_id': judge.player_id,
-                'assigned_cases': [{'case_id': case.case_id, 'points': case.points} for case in assigned_cases],
-                'total_points': total_points
-            })
-
-        return dict(judge_stats=judge_stats)
+        return summary_vars_for_template(player)
 
 page_sequence = [ArrivalPage, SelectCasesPage, ResultsPage, GameSummaryPage]
