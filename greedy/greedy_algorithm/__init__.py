@@ -1,5 +1,4 @@
 from otree.api import *
-
 import random
 import json
 
@@ -12,17 +11,36 @@ class Subsession(BaseSubsession):
     pass
 
 def creating_session(subsession: Subsession):
-    # Create 5 cases at the start of the session if they don't exist yet
-    if not subsession.session.vars.get('cases'):
-        cases = [
-            Case.create(
+    """
+    Initializes cases and judges at the beginning of the session.
+    If fewer than 5 unassigned cases are available, new cases are introduced.
+    Points of unassigned cases are incremented by 1.
+    """
+    # Retrieve all cases for the session and convert to list
+    cases = list(Case.objects_filter(session_id=subsession.session.id))
+
+    # Increment points for unassigned cases
+    for case in cases:
+        if not case.is_assigned:
+            case.points += 1
+
+    # Check the number of unassigned cases
+    unassigned_cases = [case for case in cases if not case.is_assigned]
+    unassigned_count = len(unassigned_cases)
+
+    # Add new cases if fewer than 5 unassigned cases exist
+    if unassigned_count < 5:
+        for i in range(5 - unassigned_count):
+            new_case = Case.create(
                 session_id=subsession.session.id,
-                case_id=i + 1,
+                case_id=len(cases) + i + 1,  # Ensure unique case IDs
                 points=random.randint(1, 10),
                 is_assigned=False
-            ) for i in range(5)
-        ]
-        subsession.session.vars['cases'] = [case.id for case in cases]
+            )
+            cases.append(new_case)
+
+    # Update session vars with case IDs
+    subsession.session.vars['cases'] = [case.id for case in cases]
 
     # Create a judge for each player if not already created
     if not subsession.session.vars.get('judges'):
@@ -41,6 +59,7 @@ class Group(BaseGroup):
 class Player(BasePlayer):
     arrived = models.BooleanField(initial=False)
     selected_case_ids = models.LongStringField(blank=True, default='[]')
+    task_completed = models.BooleanField(initial=False)  # Track if player has completed the task
 
     @property
     def selected_cases_list(self):
@@ -124,7 +143,6 @@ def summary_vars_for_template(player):
         assigned_cases = Case.objects_filter(session_id=player.session.id, judge_id=judge.id)
         total_points = sum(case.points for case in assigned_cases)
 
-        # Only include judges with assigned cases (total_points > 0)
         if total_points > 0:
             judge_stats.append({
                 'judge_id': judge.judge_id,
@@ -141,11 +159,18 @@ def summary_vars_for_template(player):
 class ArrivalPage(Page):
     @staticmethod
     def is_displayed(player):
-        player.arrived = True  # Set player as arrived
-        return True
+        # Only display if the player hasn't completed their task yet
+        return not player.task_completed
+
+    @staticmethod
+    def before_next_page(player, timeout_happened):
+        # Mark the player as completed once they finish the arrival step
+        player.arrived = True
+        player.task_completed = True
 
     @staticmethod
     def vars_for_template(player):
+        # Each player only sees their own arrival status
         return {
             'arrived': player.arrived,
             'round_number': player.subsession.round_number,
@@ -153,6 +178,42 @@ class ArrivalPage(Page):
 
 class SelectCasesPage(Page):
     live_method = live_method
+
+    @staticmethod
+    def is_displayed(player):
+        # Display only if not all players have completed the task
+        return not all(p.task_completed for p in player.subsession.get_players())
+
+    @staticmethod
+    def vars_for_template(player):
+        # Fetch all unassigned cases as a list
+        cases = list(Case.objects_filter(session_id=player.session.id, is_assigned=False))
+
+        # Update points for each unassigned case
+        for case in cases:
+            case.points += 1
+
+        # Add new cases if fewer than 5 are available
+        if len(cases) < 5:
+            max_case_id = max([case.case_id for case in Case.objects_filter(session_id=player.session.id)], default=0)
+            new_cases = [
+                Case.create(
+                    session_id=player.session.id,
+                    case_id=max_case_id + i + 1,
+                    points=random.randint(1, 10),
+                    is_assigned=False
+                ) for i in range(5 - len(cases))
+            ]
+            cases.extend(new_cases)
+
+        # Update session variables with the case IDs
+        player.session.vars['cases'] = [case.id for case in cases]
+
+        return {
+            'cases': [{'id': case.id, 'case_id': case.case_id, 'points': case.points} for case in cases],
+            'round_number': player.subsession.round_number,
+            'arrived': player.arrived,
+        }
 
 class ResultsPage(Page):
     @staticmethod
@@ -168,4 +229,5 @@ class GameSummaryPage(Page):
     def vars_for_template(player):
         return summary_vars_for_template(player)
 
+# Loop pages until conditions are met
 page_sequence = [ArrivalPage, SelectCasesPage, ResultsPage, GameSummaryPage]

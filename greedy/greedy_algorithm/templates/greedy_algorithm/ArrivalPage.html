@@ -1,0 +1,27 @@
+{% block content %}
+<h1>Welcome to the Arrival Page</h1>
+
+<p>You are Judge ID: {{ judge_id }}</p>
+<p id="arrival-status">Click "Proceed" when you're ready.</p>
+
+<!-- Initially hide the proceed button until the player marks themselves as arrived -->
+<form id="arrival-form" method="post" style="display: none;">
+    <button type="submit">Proceed to Select Cases</button>
+</form>
+
+<script>
+    // When the page loads, send an arrival message to the server
+    document.addEventListener("DOMContentLoaded", () => {
+        liveSend({action: 'arrive'});
+    });
+
+    // Receive messages from the server
+    function liveRecv(data) {
+        if (data.type === 'ready_to_proceed') {
+            // Show the proceed button when the player is marked as ready
+            document.getElementById("arrival-status").innerText = 'You may proceed to select cases.';
+            document.getElementById("arrival-form").style.display = 'block';
+        }
+    }
+</script>
+{% endblock %}
