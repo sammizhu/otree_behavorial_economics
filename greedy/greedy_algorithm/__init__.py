@@ -1,74 +1,51 @@
 from otree.api import *
 import json
 import random
-
-from otree.api import (
-    models, widgets, BaseConstants, BaseSubsession, BaseGroup, BasePlayer, ExtraModel
-)
-import random
-import json
-from otree.models import Session  # Import Session model to link judges and cases with a session.
+from otree.models import Session
 
 class Constants(BaseConstants):
-    """
-    Defines global constants for the app, such as URL, number of rounds, and group size.
-    """
     name_in_url = 'greedy_algorithm'
-    players_per_group = None  # No predefined group size.
-    num_rounds = 5  # Simulate 5 time periods (rounds).
+    players_per_group = None  # Each participant is in their own group
+    num_rounds = 1  # This will be overridden dynamically in creating_session
 
 class Subsession(BaseSubsession):
-    """
-    Handles the session setup and data creation logic for each round.
-    """
     pass
 
 def creating_session(subsession: Subsession):
-        """
-        Initializes cases and judges at the beginning of the session. 
-        Cases are created only in the first round, while unassigned cases carry over in subsequent rounds.
-        Judges are created for each player at every round.
-        """
+    """
+    Initializes cases and judges at the beginning of the session.
+    """
+    # Set `num_rounds` based on settings.py value and store it in `session.vars`
+    num_rounds = subsession.session.config.get('num_demo_participants', 1)
+    subsession.session.vars['num_rounds'] = num_rounds
+    
+    if subsession.round_number == 1:
+        # Initialize cases for the first round
         cases = []
-
-        # Create cases only in the first round
-        if subsession.round_number == 1:
-            for i in range(5):
-                case = Case.create(
-                    session=subsession.session,  # Corrected: use session, not subsession
-                    case_id=i + 1,
-                    points=random.randint(1, 10),
-                    is_assigned=False
-                )
-                cases.append(case)
-
-            # Save case IDs in session vars
-            subsession.session.vars['cases'] = [case.id for case in cases]
-        else:
-            # Carry over unassigned cases from previous rounds
-            cases = Case.filter(session=subsession.session)
-            subsession.session.vars['cases'] = [
-                case.id for case in cases if not case.is_assigned
-            ]
-
-        # Create a new judge for each player for the current round
-        judges = []
-        for player in subsession.get_players():
-            judge = Judge.create(
-                session=subsession.session,  # Corrected: use session, not subsession
-                player=player,
-                judge_id=player.id + (subsession.round_number - 1) * 100
+        for i in range(5):
+            case = Case.create(
+                session=subsession.session,
+                case_id=i + 1,
+                points=random.randint(1, 10),
+                is_assigned=False
             )
-            judges.append(judge)
+            cases.append(case)
+        subsession.session.vars['cases'] = [case.id for case in cases]
 
-        # Store judge IDs in session vars
-        subsession.session.vars[f'judges_round_{subsession.round_number}'] = [judge.id for judge in judges]
+    # Create a new judge for each player for the current round
+    for player in subsession.get_players():
+        Judge.create(
+            session=subsession.session,
+            player=player,
+            judge_id=player.id + (subsession.round_number - 1) * 100
+        )
 
 def live_method(player, data):
     action = data.get('action')
-
+    
     if action == 'load':
-        cases = Case.objects_filter(session_id=player.session.id)
+        # Filter only unassigned cases for load action
+        cases = Case.objects_filter(session_id=player.session.id, is_assigned=False)
         case_list = [
             {
                 'id': case.id,
@@ -79,7 +56,6 @@ def live_method(player, data):
             for case in cases
         ]
         selected_cases = player.selected_cases_list
-
         return {
             player.id_in_group: {
                 'action': 'load',
@@ -87,37 +63,42 @@ def live_method(player, data):
                 'selected_cases': selected_cases
             }
         }
-
+    
     elif action == 'select_case':
+        # Handle case selection
         case_id = int(data.get('case_id'))
-        case_list = Case.objects_filter(session_id=player.session.id, id=case_id)
-
+        case_list = Case.objects_filter(session_id=player.session.id, id=case_id, is_assigned=False)
+        
         if not case_list:
             return {player.id_in_group: {'action': 'case_not_found', 'case_id': case_id}}
-
+        
         case = case_list[0]
-        if not case.is_assigned:
-            judge = Judge.objects_filter(session_id=player.session.id, player_id=player.id).first()
-            if judge:
-                case.judge_id = judge.id
-                case.is_assigned = True
-
-                selected_cases = player.selected_cases_list
+        judge = Judge.objects_filter(session_id=player.session.id, player_id=player.id).first()
+        
+        if judge:
+            selected_cases = player.selected_cases_list
+            if case_id not in selected_cases:
                 selected_cases.append(case_id)
                 player.selected_cases_list = selected_cases
-
-                return {0: {'action': 'case_selected', 'case_id': case_id}}
-
+            return {player.id_in_group: {'action': 'case_assigned', 'case_id': case_id}}
+        
         return {player.id_in_group: {'action': 'case_unavailable', 'case_id': case_id}}
+    
+    elif action == 'unselect_case':
+        # Handle case unselection
+        case_id = int(data.get('case_id'))
+        selected_cases = player.selected_cases_list
+        
+        if case_id in selected_cases:
+            selected_cases.remove(case_id)
+            player.selected_cases_list = selected_cases
+        
+        return {player.id_in_group: {'action': 'case_unselected', 'case_id': case_id}}
 
 class Group(BaseGroup):
-    """
-    A placeholder for group-level data, which is not used in this setup.
-    """
     pass
 
 class Player(BasePlayer):
-    arrived = models.BooleanField(initial=False)
     selected_case_ids = models.LongStringField(blank=True, default='[]')
 
     @property
@@ -127,69 +108,50 @@ class Player(BasePlayer):
     @selected_cases_list.setter
     def selected_cases_list(self, value):
         self.selected_case_ids = json.dumps(value)
+    
 
 class Judge(ExtraModel):
-    """
-    Stores information about judges, linking them to players and sessions.
-    """
-    session = models.Link(Session)  # Links the judge to a session.
-    player = models.Link(Player)  # Associates the judge with a specific player.
-    judge_id = models.IntegerField()  # Unique ID for the judge.
+    session = models.Link(Session)
+    player = models.Link(Player)
+    judge_id = models.IntegerField()
 
 class Case(ExtraModel):
-    """
-    Represents a case in the experiment, tracking assignment status and points.
-    """
-    session = models.Link(Session)  # Links the case to a session.
-    case_id = models.IntegerField()  # Unique ID for the case.
-    points = models.IntegerField()  # Points associated with the case.
-    is_assigned = models.BooleanField(default=False)  # Tracks whether the case is assigned.
-    judge = models.Link(Judge)  # Links the case to the judge that selects it.
+    session = models.Link(Session)
+    case_id = models.IntegerField()
+    points = models.IntegerField()
+    is_assigned = models.BooleanField(default=False)
+    judge = models.Link(Judge)
 
 class ArrivalPage(Page):
-    """
-    Handles the arrival of players (judges) at the start of the round.
-    """
     @staticmethod
     def is_displayed(player: Player):
-        """
-        Simulates the arrival of a judge. Always displayed to update arrival status.
-        """
-        player.arrived = True
-        return True  # Always display to update arrival status
-
+        return True
+    
     @staticmethod
     def vars_for_template(player: Player):
-        """
-        Provides variables for the HTML template, including available unassigned cases.
-        """
-        # Fetch unassigned cases for the current session
+        # Filter only unassigned cases
         cases = Case.filter(session=player.session, is_assigned=False)
-
         return {
             'cases': cases,
-            'arrived': player.arrived,
             'round_number': player.subsession.round_number
         }
 
 class SelectCasesPage(Page):
     live_method = live_method
+    form_model = 'player'
+    form_fields = ['selected_case_ids']
 
     @staticmethod
-    def is_displayed(player):
-        # Display only if not all players have completed the task
-        return player.arrived
+    def is_displayed(player: Player):
+        # Display SelectCasesPage if rounds are not complete
+        return player.round_number < player.session.vars['num_rounds']
 
     @staticmethod
     def vars_for_template(player):
-        # Fetch all unassigned cases as a list
+        # Filter only unassigned cases
         cases = list(Case.objects_filter(session_id=player.session.id, is_assigned=False))
-
-        # Update points for each unassigned case
         for case in cases:
             case.points += 1
-
-        # Add new cases if fewer than 5 are available
         if len(cases) < 5:
             max_case_id = max([case.case_id for case in Case.objects_filter(session_id=player.session.id)], default=0)
             new_cases = [
@@ -201,112 +163,71 @@ class SelectCasesPage(Page):
                 ) for i in range(5 - len(cases))
             ]
             cases.extend(new_cases)
-
-        # Update session variables with the case IDs
         player.session.vars['cases'] = [case.id for case in cases]
-
         return {
             'cases': [{'id': case.id, 'case_id': case.case_id, 'points': case.points} for case in cases],
             'round_number': player.subsession.round_number,
-            'arrived': player.arrived,
         }
 
-class ResultsPage(Page):
-    """
-    Displays the results of the current round, including selected cases for each judge.
-    """
+    @staticmethod
+    def before_next_page(player: Player, timeout_happened):
+        """
+        Sets the selected cases to 'assigned' after submission.
+        """
+        selected_case_ids = json.loads(player.selected_case_ids or '[]')
+        current_judge = Judge.objects_filter(session_id=player.session.id, player_id=player.id).first()
 
+        # First, reset any previously assigned cases for this judge
+        previously_selected_cases = Case.objects_filter(session_id=player.session.id, judge=current_judge)
+        for case in previously_selected_cases:
+            case.is_assigned = False
+            case.judge = None
+
+        # Now, assign only the cases that are selected in the current submission
+        for case_id in selected_case_ids:
+            case = Case.objects_filter(session_id=player.session.id, id=case_id).first()
+            if case and not case.is_assigned:
+                case.is_assigned = True
+                case.judge = current_judge
+
+class ResultsPage(Page):
     @staticmethod
     def is_displayed(player: Player):
-        """
-        Only display if the judge has arrived.
-        """
-        return player.arrived
+        return player.round_number < player.session.vars['num_rounds']
 
     @staticmethod
     def vars_for_template(player: Player):
-        """
-        Provides the selected cases and judge information for the template.
-        """
-        # Retrieve the judge associated with the current player
         all_cases = Case.filter(session=player.session)
-
-        current_judges = Judge.filter(session=player.session, player=player)
-        if current_judges:
-            current_judge = current_judges[0]
-        else:
-            current_judge = None
-
+        current_judge_list = Judge.filter(session=player.session, player=player)
+        current_judge = current_judge_list[0] if current_judge_list else None
         if not current_judge:
             return {
                 'selected_cases': [],
                 'round_number': player.subsession.round_number,
                 'arrived': player.arrived
             }
-
-        # Fetch cases assigned to this specific judge
         selected_cases = Case.filter(session=player.session, judge=current_judge)
-
-        # Convert the cases to a list of dictionaries for compatibility with HTML templates
+        
+        # Calculate total points of selected cases
+        total_points = sum(case.points for case in selected_cases)
+        
+        # Set the player's payoff
+        player.payoff = total_points
+        
         case_list = [
             {'id': case.id, 'case_id': case.case_id, 'points': case.points, 'judge_id': case.judge.judge_id}
             for case in selected_cases
         ]
-
         return {
             'all_cases': all_cases,
             'judge': current_judge,
             'selected_cases': case_list,
             'round_number': player.subsession.round_number,
-            'arrived': player.arrived
+            'total_points': total_points  # For display purposes
         }
 
-class GameSummaryPage(Page):
-    """
-    Displays the summary of the game after the last round, including judge statistics.
-    """
-    @staticmethod
-    def is_displayed(player: Player):
-        """
-        Only display this page after the final round.
-        """
-        return player.round_number == Constants.num_rounds
-
-    @staticmethod
-    def vars_for_template(player: Player):
-        """
-        Provides a summary of all judges and their assigned cases for the template.
-        """
-        # Fetch all judges from the session
-        judges = Judge.filter(session=player.session)
-
-        # Collect stats for each judge
-        judge_stats = []
-        for judge in judges:
-            assigned_cases = Case.filter(session=player.session, judge=judge)
-
-            # Collect case information
-            case_data = [
-                {'case_id': case.case_id, 'points': case.points}
-                for case in assigned_cases
-            ]
-
-            # Calculate total points assigned to this judge
-            total_points = sum(case.points for case in assigned_cases)  # Use dot notation
-
-            judge_stats.append({
-                'judge_id': judge.judge_id,
-                'player_id': judge.player.id,
-                'assigned_cases': case_data,
-                'total_points': total_points
-            })
-
-        return {'judge_stats': judge_stats}
-
-# Define the sequence of pages for the app
 page_sequence = [
     ArrivalPage,
     SelectCasesPage,
     ResultsPage,
-    GameSummaryPage
 ]

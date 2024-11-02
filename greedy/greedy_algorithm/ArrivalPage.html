@@ -6,13 +6,8 @@
 {% endblock %}
 
 {% block content %}
-    {% if arrived %}
-        <p>You have arrived at time {{ round_number }}.</p>
-        <p>You will now proceed to select cases.</p>
-    {% else %}
-        <p>You did not arrive at time {{ round_number }}.</p>
-        <p>Please wait for the next round.</p>
-    {% endif %}
+    <p>You are judge #{{ player.id_in_group }}.</p>
+    <p>You will now proceed to select cases.</p>
     <form method="post">
         <button type="submit">Continue</button>
     </form>

@@ -13,8 +13,10 @@
                 <li>Case {{ case.case_id }} - Points: {{ case.points }}</li>
             {% endfor %}
         </ul>
+    <p>You may now exit the program.</p>
     {% else %}
         <p>You did not select any cases.</p>
+        <p>You may now exit the program.</p>
     {% endif %}
     <form method="post">
         <button type="submit">Continue</button>

@@ -4,7 +4,7 @@ SESSION_CONFIGS = [
     dict(
         name='greedy_algorithm',
         app_sequence=['greedy_algorithm'],
-        num_demo_participants=1,
+        num_demo_participants=5,
     )
 ]
 
