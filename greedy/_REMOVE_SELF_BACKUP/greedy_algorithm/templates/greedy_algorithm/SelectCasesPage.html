@@ -1,0 +1,87 @@
+{% extends "otree/Page.html" %}
+{% load otree static %}
+{% block title %}
+    Select Cases
+{% endblock %}
+
+{% block content %}
+    <form id="form" method="post">
+        <div id="case-list">
+            <!-- Cases will be dynamically loaded here -->
+        </div>
+        <button type="button" onclick="submitSelection()">Submit</button>
+    </form>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+    document.addEventListener("DOMContentLoaded", function() {
+        console.log('Page loaded, sending load action');
+        liveSend({'action': 'load'});
+    });
+
+    function liveRecv(data) {
+        console.log('Received data:', data);
+
+        var action = data.action;
+
+        if (action == 'load') {
+            var cases = data.cases;
+            var selected_cases = data.selected_cases.map(Number);
+            var caseListDiv = document.getElementById('case-list');
+            caseListDiv.innerHTML = '';
+
+            cases.forEach(function(caseObj) {
+                var checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.className = 'case-checkbox';
+                checkbox.dataset.caseId = caseObj.id;
+                checkbox.addEventListener('change', onCaseCheckboxChange);
+
+                var label = document.createElement('label');
+                label.appendChild(checkbox);
+                label.appendChild(document.createTextNode(' Case ID: ' + caseObj.case_id + ' (Points: ' + caseObj.points + ')'));
+                
+                caseListDiv.appendChild(label);
+                caseListDiv.appendChild(document.createElement('br'));
+
+                // Mark already selected cases as checked
+                if (selected_cases.includes(caseObj.id)) {
+                    checkbox.checked = true;
+                }
+            });
+        } else if (action == 'case_assigned' || action == 'case_unselected') {
+            toggleCheckboxState(data.case_id, action === 'case_assigned');
+        } else if (action == 'case_unavailable') {
+            alert('Case ' + data.case_id + ' is no longer available.');
+        }
+    }
+
+    function onCaseCheckboxChange(event) {
+        var checkbox = event.target;
+        var case_id = checkbox.dataset.caseId;
+        
+        if (checkbox.checked) {
+            console.log('Case selected:', case_id);
+            liveSend({'action': 'select_case', 'case_id': case_id});
+        } else {
+            console.log('Case unselected:', case_id);
+            liveSend({'action': 'unselect_case', 'case_id': case_id});
+        }
+    }
+
+    function toggleCheckboxState(caseId, isSelected) {
+        var checkboxes = document.getElementsByClassName('case-checkbox');
+        Array.from(checkboxes).forEach(function(checkbox) {
+            if (parseInt(checkbox.dataset.caseId) === parseInt(caseId)) {
+                checkbox.checked = isSelected;
+            }
+        });
+    }
+
+    function submitSelection() {
+        document.getElementById('form').submit();
+    }
+</script>
+{% endblock %}

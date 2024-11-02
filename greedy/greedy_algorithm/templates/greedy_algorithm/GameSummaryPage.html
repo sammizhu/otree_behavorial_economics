@@ -1,18 +1,4 @@
-{% extends "global/Page.html" %}
-
 {% block content %}
-<h1>Final Game Summary</h1>
-
-{% for judge in judge_stats %}
-  <h2>Judge ID: {{ judge.judge_id }} (Player {{ judge.player_id }})</h2>
-  <p>Total Points: {{ judge.total_points }}</p>
-
-  <h3>Assigned Cases:</h3>
-  <ul>
-    {% for case in judge.assigned_cases %}
-      <li>Case ID: {{ case.case_id }}, Points: {{ case.points }}</li>
-    {% endfor %}
-  </ul>
-  <hr>
-{% endfor %}
+<h1>Game Summary</h1>
+<p>Here is the final summary of the game.</p>
 {% endblock %}

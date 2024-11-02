@@ -1,0 +1,16 @@
+{% block content %}
+<h1>You have selected the following cases:</h1>
+{{ if selected_cases }}
+    <ul>
+        {{ for case in selected_cases }}
+            <li>Case {{ case.case_id }} - Points: {{ case.points }}</li>
+        {{ endfor }}
+    </ul>
+{{ else }}
+    <p>You did not select any cases.</p>
+{{ endif }}
+
+<form method="post">
+    {{ next_button }}
+</form>
+{% endblock %}

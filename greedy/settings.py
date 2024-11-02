@@ -3,9 +3,10 @@ from os import environ
 SESSION_CONFIGS = [
     dict(
         name='greedy_algorithm',
+        display_name="Greedy Algorithm",
+        num_demo_participants=2,
         app_sequence=['greedy_algorithm'],
-        num_demo_participants=1,
-    )
+    ),
 ]
 
 # if you set a property in SESSION_CONFIG_DEFAULTS, it will be inherited by all configs
