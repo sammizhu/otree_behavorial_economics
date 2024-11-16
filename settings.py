@@ -2,8 +2,13 @@ from os import environ
 
 SESSION_CONFIGS = [
     dict(
-        name='greedy_algorithm',
-        app_sequence=['greedy_algorithm'],
+        name='greedy',
+        app_sequence=['greedy'],
+        num_demo_participants=5,
+    ),
+    dict(
+        name='batch',
+        app_sequence=['batch'],
         num_demo_participants=5,
     )
 ]
