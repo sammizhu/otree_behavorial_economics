@@ -10,6 +10,7 @@ SESSION_CONFIGS = [
         name='batch',
         app_sequence=['batch'],
         num_demo_participants=5,
+        num_cases=5,
     )
 ]
 

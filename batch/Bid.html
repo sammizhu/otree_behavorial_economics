@@ -1,19 +1,14 @@
-{{ block title }}Bid{{ endblock }}
-{{ block content }}
+{% extends "global/Page.html" %}
+{% block title %}Bid{% endblock %}
+{% block content %}
+{{ include_sibling 'instructions.html' }}
+    <p>Welcome, Judge #{{ player_id_in_group }}</p>
+    <p>Please make your bid now. The amount can be between {{ bid_min }} and {{ bid_max }}, inclusive.</p>
 
-    <p>
-        The value of the item is estimated to be {{ player.item_value_estimate }}.
-        This estimate may deviate from the actual value by at most {{ C.BID_NOISE }}.
-    </p>
-
-    <p>
-        Please make your bid now. The amount can be between {{ C.BID_MIN }} and {{ C.BID_MAX }}, inclusive.
-    </p>
-
-    {{ formfields }}
-
-    {{ next_button }}
-
-    {{ include_sibling 'instructions.html' }}
-
-{{ endblock }}
+    <form method="post">
+        <table>
+            {{ formfields }}
+        </table>
+        {{ next_button }}
+    </form>
+{% endblock %}

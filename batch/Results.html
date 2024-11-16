@@ -1,37 +1,34 @@
-{{ block title }}Results{{ endblock }}
-{{ block content }}
+{% extends "global/Page.html" %}
+{% block title %}Results{% endblock %}
+{% block content %}
+    <p>Welcome, Judge #{{ player_id_in_group }}</p>
 
-    <p>
-        {{ if player.is_winner }}
-            You won the bid!
-            {{ if is_greedy }}
-                However, your bid amount was higher than the actual value of the item. Your payoff is therefore zero.
-            {{ elif player.payoff == 0 }}
-                Your payoff, however, is zero.
-            {{ endif }}
-        {{ else }}
-            You did not win the bid.
-        {{ endif }}
-    </p>
+    {% if assigned_cases %}
+        <p>You have been assigned the following case{{ assigned_cases|length }}:</p>
+        <ul>
+            {% for case_id in assigned_cases %}
+                <li>Case {{ case_id }}</li>
+            {% endfor %}
+        </ul>
+    {% else %}
+        <p>You were not assigned any cases.</p>
+    {% endif %}
 
-    <table class="table" style="width:400px">
-
+    <h3>Your Bids</h3>
+    <table class="table">
         <tr>
-            <th>Your bid</th>
-            <th>Winning bid</th>
-            <th>Actual value</th>
-            <th>Your payoff</th>
+            <th>Case ID</th>
+            <th>Your Bid</th>
         </tr>
-
-    <tr>
-        <td>{{ player.bid_amount }}</td>
-        <td>{{ group.highest_bid }}</td>
-        <td>{{ group.item_value }}</td>
-        <td>{{ player.payoff }}</td>
-    </tr>
-
+        {% for bid in player_bids %}
+        <tr>
+            <td>{{ bid.case.case_id }}</td>
+            <td>{{ bid.bid_amount }}</td>
+        </tr>
+        {% endfor %}
     </table>
 
-    {{ next_button }}
+    <p>Your total payoff is: {{ player.player_payoff }}</p>
 
-{{ endblock }}
+    {{ next_button }}
+{% endblock %}

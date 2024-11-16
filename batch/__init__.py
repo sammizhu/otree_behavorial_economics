@@ -1,24 +1,17 @@
 from otree.api import *
-
+import random
+import json
 
 doc = """
-In a common value auction game, players simultaneously bid on the item being
-auctioned.<br/>
-Prior to bidding, they are given an estimate of the actual value of the item.
-This actual value is revealed after the bidding.<br/>
-Bids are private. The player with the highest bid wins the auction, but
-payoff depends on the bid amount and the actual value.<br/>
+In this game, players bid on cases. The player with the lowest bid wins the case.
 """
 
-
 class C(BaseConstants):
-    NAME_IN_URL = 'common_value_auction'
+    NAME_IN_URL = 'case_assignment_auction'
     PLAYERS_PER_GROUP = None
     NUM_ROUNDS = 1
     BID_MIN = cu(0)
     BID_MAX = cu(10)
-    # Error margin for the value estimates shown to the players
-    BID_NOISE = cu(1)
 
 
 class Subsession(BaseSubsession):
@@ -26,97 +19,117 @@ class Subsession(BaseSubsession):
 
 
 class Group(BaseGroup):
-    item_value = models.CurrencyField(
-        doc="""Common value of the item to be auctioned, random for treatment"""
-    )
-    highest_bid = models.CurrencyField()
+    pass
 
 
 class Player(BasePlayer):
-    item_value_estimate = models.CurrencyField(
-        doc="""Estimate of the common value, may be different for each player"""
+    # Dynamically create bid fields for up to 10 cases
+    assigned_case_ids = models.StringField(blank=True, doc="Stores assigned case IDs as a JSON string")
+    player_payoff = models.CurrencyField(initial=0, doc="Player's total payoff")
+
+
+# Add bid fields dynamically
+for i in range(1, 11):  # Adjust the range to match the maximum number of cases
+    setattr(
+        Player,
+        f"bid_case_{i}",
+        models.CurrencyField(
+            min=C.BID_MIN,
+            max=C.BID_MAX,
+            label=f"Bid for Case {i}",
+        ),
     )
-    bid_amount = models.CurrencyField(
-        min=C.BID_MIN,
-        max=C.BID_MAX,
-        doc="""Amount bidded by the player""",
-        label="Bid amount",
-    )
-    is_winner = models.BooleanField(
-        initial=False, doc="""Indicates whether the player is the winner"""
-    )
+
+
+class Case(ExtraModel):
+    subsession = models.Link(Subsession)
+    case_id = models.IntegerField()
+    is_assigned = models.BooleanField(default=False)
+    assigned_player = models.Link(Player)
+
+
+class CaseBid(ExtraModel):
+    subsession = models.Link(Subsession)
+    player = models.Link(Player)
+    case = models.Link(Case)
+    bid_amount = models.CurrencyField(min=C.BID_MIN, max=C.BID_MAX)
 
 
 # FUNCTIONS
 def creating_session(subsession: Subsession):
-    for g in subsession.get_groups():
-        import random
+    num_cases = subsession.session.config.get('num_cases', 5)
+    subsession.session.vars['num_cases'] = num_cases
 
-        item_value = random.uniform(C.BID_MIN, C.BID_MAX)
-        g.item_value = round(item_value, 1)
-
-
-def set_winner(group: Group):
-    import random
-
-    players = group.get_players()
-    group.highest_bid = max([p.bid_amount for p in players])
-    players_with_highest_bid = [p for p in players if p.bid_amount == group.highest_bid]
-    winner = random.choice(
-        players_with_highest_bid
-    )  # if tie, winner is chosen at random
-    winner.is_winner = True
-    for p in players:
-        set_payoff(p)
+    for i in range(1, num_cases + 1):
+        Case.create(subsession=subsession, case_id=i)
 
 
-def generate_value_estimate(group: Group):
-    import random
+def set_assignments(group: Group):
+    subsession = group.subsession
+    cases = Case.filter(subsession=subsession)
+    for case in cases:
+        case_bids = CaseBid.filter(subsession=subsession, case=case)
+        if case_bids:
+            min_bid_amount = min(bid.bid_amount for bid in case_bids)
+            lowest_bidders = [bid for bid in case_bids if bid.bid_amount == min_bid_amount]
+            winner_bid = random.choice(lowest_bidders)
+            winner_player = winner_bid.player
+            case.is_assigned = True
+            case.assigned_player = winner_player
 
-    estimate = group.item_value + random.uniform(-C.BID_NOISE, C.BID_NOISE)
-    estimate = round(estimate, 1)
-    if estimate < C.BID_MIN:
-        estimate = C.BID_MIN
-    if estimate > C.BID_MAX:
-        estimate = C.BID_MAX
-    return estimate
-
-
-def set_payoff(player: Player):
-    group = player.group
-
-    if player.is_winner:
-        player.payoff = group.item_value - player.bid_amount
-        if player.payoff < 0:
-            player.payoff = 0
-    else:
-        player.payoff = 0
-
-
-# PAGES
-class Introduction(Page):
-    @staticmethod
-    def before_next_page(player: Player, timeout_happened):
-        group = player.group
-
-        player.item_value_estimate = generate_value_estimate(group)
-
+            assigned_case_ids_str = winner_player.field_maybe_none('assigned_case_ids') or "[]"
+            assigned_cases = json.loads(assigned_case_ids_str)
+            assigned_cases.append(case.case_id)
+            winner_player.assigned_case_ids = json.dumps(assigned_cases)
+            winner_player.player_payoff += C.BID_MAX - winner_bid.bid_amount
 
 class Bid(Page):
     form_model = 'player'
-    form_fields = ['bid_amount']
 
+    @staticmethod
+    def get_form_fields(player):
+        num_cases = player.subsession.session.vars['num_cases']
+        return [f"bid_case_{i}" for i in range(1, num_cases + 1)]
+
+    @staticmethod
+    def vars_for_template(player):
+        num_cases = player.subsession.session.vars['num_cases']
+        return {
+            'cases': range(1, num_cases + 1),
+            'bid_min': C.BID_MIN,
+            'bid_max': C.BID_MAX,
+            'player_id_in_group': player.id_in_group,
+        }
+
+    @staticmethod
+    def before_next_page(player, timeout_happened):
+        num_cases = player.subsession.session.vars['num_cases']
+        for i in range(1, num_cases + 1):
+            bid_amount = getattr(player, f"bid_case_{i}")
+            cases = Case.filter(subsession=player.subsession, case_id=i)
+            case = cases[0] if cases else None
+            if case:
+                CaseBid.create(
+                    subsession=player.subsession,
+                    case=case,
+                    player=player,
+                    bid_amount=bid_amount,
+                )
 
 class ResultsWaitPage(WaitPage):
-    after_all_players_arrive = set_winner
+    after_all_players_arrive = set_assignments
 
 
 class Results(Page):
     @staticmethod
-    def vars_for_template(player: Player):
-        group = player.group
+    def vars_for_template(player):
+        assigned_case_ids_str = player.field_maybe_none('assigned_case_ids') or "[]"
+        assigned_cases = json.loads(assigned_case_ids_str)
+        return {
+            'assigned_cases': assigned_cases,
+            'player_bids': CaseBid.filter(subsession=player.subsession, player=player),
+            'player_id_in_group': player.id_in_group,
+        }
 
-        return dict(is_greedy=group.item_value - player.bid_amount < 0)
 
-
-page_sequence = [Introduction, Bid, ResultsWaitPage, Results]
+page_sequence = [Bid, ResultsWaitPage, Results]
