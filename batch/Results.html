@@ -4,7 +4,7 @@
     <p>Welcome, Judge #{{ player_id_in_group }}</p>
 
     {% if assigned_cases %}
-        <p>You have been assigned the following case{{ assigned_cases|length }}:</p>
+        <p>You have been assigned the following case:</p>
         <ul>
             {% for case_id in assigned_cases %}
                 <li>Case {{ case_id }}</li>
@@ -23,7 +23,13 @@
         {% for bid in player_bids %}
         <tr>
             <td>{{ bid.case.case_id }}</td>
-            <td>{{ bid.bid_amount }}</td>
+            <td>
+                {% if bid.bid_amount == bid_max %}
+                    Did not Bid
+                {% else %}
+                    {{ bid.bid_amount }}
+                {% endif %}
+            </td>
         </tr>
         {% endfor %}
     </table>

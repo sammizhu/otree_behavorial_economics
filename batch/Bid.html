@@ -69,7 +69,14 @@
                 <p>{{ case.description }}</p>
             </div>
             <div class="card-footer">
-                {{ formfield case.form_field_name }}
+                <button type="button" class="btn btn-primary bid-toggle-btn" 
+                        data-field="{{ case.form_field_name }}">
+                    Click to Bid
+                </button>
+                <div class="bid-input-container" style="display: none;">
+                    <label for="{{ case.form_field_name }}">Your Bid:</label>
+                    {{ formfield case.form_field_name }}
+                </div>
             </div>
         </div>
         {% endfor %}
@@ -78,4 +85,26 @@
         {{ next_button }}
     </div>
 </form>
+
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        document.querySelectorAll('.bid-toggle-btn').forEach(button => {
+            button.addEventListener('click', () => {
+                const fieldName = button.dataset.field;
+                const container = button.nextElementSibling;
+                if (container.style.display === 'none') {
+                    container.style.display = 'block';
+                    button.textContent = 'Cancel Bid';
+                } else {
+                    container.style.display = 'none';
+                    button.textContent = 'Click to Bid';
+                    const inputField = container.querySelector(`input[name="${fieldName}"]`);
+                    if (inputField) {
+                        inputField.value = ''; // Reset the bid
+                    }
+                }
+            });
+        });
+    });
+</script>
 {% endblock %}

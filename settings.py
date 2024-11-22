@@ -9,7 +9,7 @@ SESSION_CONFIGS = [
     dict(
         name='batch',
         app_sequence=['batch'],
-        num_demo_participants=5,
+        num_demo_participants=2,
         num_cases=6,
     )
 ]

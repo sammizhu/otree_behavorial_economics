@@ -34,6 +34,7 @@ for i in range(1, 11):  # Adjust the range to match the maximum number of cases
         Player,
         f"bid_case_{i}",
         models.CurrencyField(
+            blank=True,
             min=C.BID_MIN,
             max=C.BID_MAX,
             label=f"Bid for Case {i}",
@@ -69,6 +70,7 @@ def set_assignments(group: Group):
     cases = Case.filter(subsession=subsession)
     for case in cases:
         case_bids = CaseBid.filter(subsession=subsession, case=case)
+        case_bids = [bid for bid in case_bids if bid.bid_amount is not None]
         if case_bids:
             min_bid_amount = min(bid.bid_amount for bid in case_bids)
             lowest_bidders = [bid for bid in case_bids if bid.bid_amount == min_bid_amount]
@@ -81,7 +83,7 @@ def set_assignments(group: Group):
             assigned_cases = json.loads(assigned_case_ids_str)
             assigned_cases.append(case.case_id)
             winner_player.assigned_case_ids = json.dumps(assigned_cases)
-            winner_player.player_payoff += C.BID_MAX - winner_bid.bid_amount
+            winner_player.player_payoff += winner_bid.bid_amount
 
 class Bid(Page):
     form_model = 'player'
@@ -107,7 +109,8 @@ class Bid(Page):
         return {
             'cases': cases,
             'bid_min': C.BID_MIN,
-            'bid_max': C.BID_MAX,
+            'bid_max': C.BID_MAX - 1,
+            'none': C.BID_MAX,
             'player_id_in_group': player.id_in_group,
         }
 
@@ -115,15 +118,23 @@ class Bid(Page):
     def before_next_page(player, timeout_happened):
         num_cases = player.subsession.session.vars['num_cases']
         for i in range(1, num_cases + 1):
-            bid_amount = getattr(player, f"bid_case_{i}")
+            field_name = f"bid_case_{i}"
+            # Safely retrieve the bid amount
+            bid_amount = player.field_maybe_none(field_name)
+            if bid_amount is None:  # If no value is submitted, skip, don't assign
+                continue
+
+            # Find the case
             cases = Case.filter(subsession=player.subsession, case_id=i)
             case = cases[0] if cases else None
+
+            # Create a CaseBid object if a case exists
             if case:
                 CaseBid.create(
                     subsession=player.subsession,
                     case=case,
                     player=player,
-                    bid_amount=bid_amount,
+                    bid_amount=bid_amount,  # Ensure this is never None
                 )
 
 class ResultsWaitPage(WaitPage):
@@ -139,6 +150,7 @@ class Results(Page):
             'assigned_cases': assigned_cases,
             'player_bids': CaseBid.filter(subsession=player.subsession, player=player),
             'player_id_in_group': player.id_in_group,
+            'bid_max': C.BID_MAX
         }
 
 
