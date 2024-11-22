@@ -88,14 +88,24 @@ class Bid(Page):
 
     @staticmethod
     def get_form_fields(player):
+        # Dynamically generate form fields for all cases
         num_cases = player.subsession.session.vars['num_cases']
         return [f"bid_case_{i}" for i in range(1, num_cases + 1)]
 
     @staticmethod
     def vars_for_template(player):
+        # Pass case details for rendering in the template
         num_cases = player.subsession.session.vars['num_cases']
+        cases = [
+            {
+                'case_id': i,
+                'description': f"Details for Case {i}",
+                'form_field_name': f"bid_case_{i}",
+            }
+            for i in range(1, num_cases + 1)
+        ]
         return {
-            'cases': range(1, num_cases + 1),
+            'cases': cases,
             'bid_min': C.BID_MIN,
             'bid_max': C.BID_MAX,
             'player_id_in_group': player.id_in_group,
