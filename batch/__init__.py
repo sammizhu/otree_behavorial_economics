@@ -29,7 +29,7 @@ class Player(BasePlayer):
     username = models.StringField(blank=True)
     password = models.StringField(blank=True)
 
-    # This will store the entire CSV text that the admin pastes in.
+    # Store the entire CSV text that the admin pastes in.
     csv_data = models.LongStringField(blank=True)
 
     # For Judges
@@ -37,9 +37,8 @@ class Player(BasePlayer):
     player_payoff = models.CurrencyField(initial=0, doc="Player's total payoff")
 
 
-
 # Add bid fields dynamically
-for i in range(1, 100):  #statically set 100 as the maximum number of cases
+for i in range(1, 100):  # up to 100 possible cases
     setattr(
         Player,
         f"bid_case_{i}",
@@ -50,6 +49,11 @@ for i in range(1, 100):  #statically set 100 as the maximum number of cases
             label=f"Bid for Case {i}",
         ),
     )
+
+class Judge(ExtraModel):
+    subsession = models.Link(Subsession)
+    player = models.Link(Player)
+    judge_id = models.IntegerField()
 
 
 class Case(ExtraModel):
@@ -63,7 +67,7 @@ class Case(ExtraModel):
     description = models.LongStringField()
     # assignment logic
     is_assigned = models.BooleanField(default=False)
-    assigned_player = models.Link(Player)
+    assigned_judge = models.Link(Judge)
 
 
 class CaseBid(ExtraModel):
@@ -75,11 +79,24 @@ class CaseBid(ExtraModel):
 
 # FUNCTIONS
 def creating_session(subsession: Subsession):
-    pass
+    """
+    If you want to create a Judge object for every 'judge' player,
+    you can do that here.
+    """
+    for player in subsession.get_players():
+        if player.participant.vars.get('role') == 'judge':
+            # Create a Judge object for this player
+            Judge.create(
+                subsession=subsession,
+                player=player,
+                judge_id=player.id_in_group  
+            )
+
 
 def set_assignments(group: Group):
     subsession = group.subsession
     cases = Case.filter(subsession=subsession)
+
     for case in cases:
         case_bids = CaseBid.filter(subsession=subsession, case=case)
         case_bids = [bid for bid in case_bids if bid.bid_amount is not None]
@@ -89,13 +106,18 @@ def set_assignments(group: Group):
             winner_bid = random.choice(lowest_bidders)
             winner_player = winner_bid.player
             case.is_assigned = True
-            case.assigned_player = winner_player
+
+            # assign case to the winning judge
+            judge_qs = Judge.filter(subsession=subsession, player=winner_player)
+            if judge_qs:
+                case.assigned_judge = judge_qs[0]
 
             assigned_case_ids_str = winner_player.field_maybe_none('assigned_case_ids') or "[]"
             assigned_cases = json.loads(assigned_case_ids_str)
             assigned_cases.append(case.case_id)
             winner_player.assigned_case_ids = json.dumps(assigned_cases)
             winner_player.player_payoff += winner_bid.bid_amount
+
 
 class Login(Page):
     form_model = 'player'
@@ -107,16 +129,11 @@ class Login(Page):
 
     @staticmethod
     def error_message(player: Player, values):
-        # You can do more complex checks here
         if not (values['username'] and values['password']):
             return "Please enter both username and password."
 
     @staticmethod
     def before_next_page(player: Player, timeout_happened):
-        # Example: if user enters admin / admin, we treat them as admin
-        # else if user enters judge / judge, we treat them as judge.
-        # In reality, you might have a dictionary of valid credentials.
-
         username = player.username
         password = player.password
         print(username, password)
@@ -129,27 +146,23 @@ class Login(Page):
             print("Incorrect username and password combination. Please try again.")
             return ValueError
 
+
 class Admin(Page):
     form_model = 'player'
     form_fields = ['csv_data']
 
     @staticmethod
     def before_next_page(player: Player, timeout_happened):
-
-        # Parse CSV from the text field
         data_str = player.csv_data or ""
         if not data_str.strip():
             return  # No data uploaded
-        
+
         f = io.StringIO(data_str)
         reader = csv.DictReader(f, delimiter=',') 
 
         num_cases = 0
-
-        # For each row, create a new Case
         for row in reader:
             num_cases += 1
-            # adapt the keys to match your CSV headers exactly
             Case.create(
                 subsession=player.subsession,
                 case_id=int(row['Case_ID']),
@@ -165,13 +178,10 @@ class Admin(Page):
 
     @staticmethod
     def is_displayed(player: Player):
-        # Show only if this player is 'admin', for example
         return player.participant.vars.get('role') == 'admin'
 
+
 class AdminReview(Page):
-    """
-    Page shown after AdminHome, to display the newly created cases.
-    """
     @staticmethod
     def is_displayed(player: Player):
         return player.participant.vars.get('role') == 'admin'
@@ -182,6 +192,7 @@ class AdminReview(Page):
             'cases': Case.filter(subsession=player.subsession),
             'num_cases': player.subsession.session.vars['num_cases']
         }
+
 
 class Bid(Page):
     form_model = 'player'
@@ -194,10 +205,7 @@ class Bid(Page):
     def get_form_fields(player: Player):
         cases = Case.filter(subsession=player.subsession)
         cases_sorted = sorted(cases, key=lambda c: c.case_id)
-
-        form_fields = []
-        for c in cases_sorted:
-            form_fields.append(f"bid_case_{c.case_id}")
+        form_fields = [f"bid_case_{c.case_id}" for c in cases_sorted]
         return form_fields
 
     @staticmethod
@@ -205,7 +213,6 @@ class Bid(Page):
         cases = Case.filter(subsession=player.subsession)
         cases_sorted = sorted(cases, key=lambda c: c.case_id)
 
-        # Build a list of dicts for rendering in the template
         data_for_template = []
         for c in cases_sorted:
             data_for_template.append({
@@ -216,7 +223,7 @@ class Bid(Page):
                 'points': c.points,
                 'date_filled': c.date_filled,
                 'description': c.description,
-                'form_field_name': f"bid_case_{c.case_id}",  
+                'form_field_name': f"bid_case_{c.case_id}",
             })
 
         return {
@@ -265,11 +272,12 @@ class Results(Page):
             'bid_max': C.BID_MAX
         }
 
+
 page_sequence = [
-    Login,      
-    Admin,  
+    Login,
+    Admin,
     AdminReview,
-    Bid,        
+    Bid,
     ResultsWaitPage,
     Results,
 ]
