@@ -1,0 +1,166 @@
+{% extends "global/Page.html" %}
+{% load static %}
+
+{% block title %}
+    Select Cases
+{% endblock %}
+
+{% block content %}
+<style>
+/* same CSS as before */
+.cases-container {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 20px;
+    margin-top: 20px;
+}
+.case-card {
+    background-color: #fff;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    overflow: hidden;
+    width: 300px;
+    text-align: left;
+}
+.case-card .card-header {
+    background-color: #f8f9fa;
+    padding: 10px;
+    font-weight: bold;
+    color: #333;
+    border-bottom: 1px solid #ddd;
+}
+.case-card .card-body {
+    padding: 15px;
+    font-size: 0.9rem;
+    color: #555;
+}
+.case-card .card-footer {
+    padding: 15px;
+    background-color: #f8f9fa;
+    border-top: 1px solid #ddd;
+}
+.card-footer label {
+    font-weight: bold;
+}
+.card-footer input {
+    width: auto;
+    margin-right: 5px;
+    font-size: 1rem;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+}
+</style>
+
+<p>You have <strong>{{ budget }}</strong> total points. 
+   You cannot select more than {{ budget }} in total.</p>
+
+<form id="form" method="post">
+    <div class="cases-container" id="case-list">
+        <!-- inserted dynamically by JS -->
+    </div>
+    <div class="text-center mt-4">
+        <button type="button" onclick="submitSelection()">Submit</button>
+    </div>
+</form>
+
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+    liveSend({'action': 'load'}); 
+});
+
+function liveRecv(data) {
+    console.log('Received data:', data);
+    var action = data.action;
+    if (action === 'load') {
+        var container = document.getElementById('case-list');
+        container.innerHTML = '';
+        var cases = data.cases;
+        var selectedCases = data.selected_cases;
+        cases.forEach(function(c) {
+            var cardDiv = document.createElement('div');
+            cardDiv.className = 'case-card';
+            
+            var headerDiv = document.createElement('div');
+            headerDiv.className = 'card-header';
+            headerDiv.innerHTML = '<h5>Case #' + c.case_id + '</h5>';
+            cardDiv.appendChild(headerDiv);
+
+            var bodyDiv = document.createElement('div');
+            bodyDiv.className = 'card-body';
+            bodyDiv.innerHTML = `
+                <p><strong>Case Type:</strong> ${c.case_type || ''}</p>
+                <p><strong>Region:</strong> ${c.region || ''}</p>
+                <p><strong>Priority:</strong> ${c.priority || ''}</p>
+                <p><strong>Points:</strong> ${c.points || ''}</p>
+                <p><strong>Date Filled:</strong> ${c.date_filled || ''}</p>
+                <p><strong>Description:</strong> ${c.description || ''}</p>
+            `;
+            cardDiv.appendChild(bodyDiv);
+
+            var footerDiv = document.createElement('div');
+            footerDiv.className = 'card-footer';
+            var checkbox = document.createElement('input');
+            checkbox.type = 'checkbox';
+            checkbox.className = 'case-checkbox';
+            checkbox.dataset.caseId = c.case_id;
+            checkbox.addEventListener('change', onCaseCheckboxChange);
+
+            if (selectedCases.includes(c.case_id)) {
+                checkbox.checked = true;
+            }
+            var label = document.createElement('label');
+            label.style.fontWeight = 'normal';
+            label.innerHTML = ' Select this case';
+            label.insertBefore(checkbox, label.firstChild);
+            footerDiv.appendChild(label);
+
+            cardDiv.appendChild(footerDiv);
+            container.appendChild(cardDiv);
+        });
+    }
+    else if (action === 'case_assigned') {
+        toggleCheckboxState(data.case_id, true);
+    }
+    else if (action === 'case_unselected') {
+        toggleCheckboxState(data.case_id, false);
+    }
+    else if (action === 'exceed_budget') {
+        // They tried to select a case that would exceed the budget
+        toggleCheckboxState(data.case_id, false);
+        alert(`Invalid amount of points avaliable.`);
+    }
+    else if (action === 'case_not_found') {
+        alert(`Case #${data.case_id} not found.`);
+    }
+    else if (action === 'case_unavailable') {
+        alert(`Case #${data.case_id} is unavailable.`);
+    }
+}
+
+function onCaseCheckboxChange(e) {
+    var checkbox = e.target;
+    var cid = parseInt(checkbox.dataset.caseId);
+    if (checkbox.checked) {
+        liveSend({action: 'select_case', case_id: cid});
+    } else {
+        liveSend({action: 'unselect_case', case_id: cid});
+    }
+}
+
+function toggleCheckboxState(caseId, isSelected) {
+    var checkboxes = document.getElementsByClassName('case-checkbox');
+    for (var i = 0; i < checkboxes.length; i++) {
+        var cb = checkboxes[i];
+        if (parseInt(cb.dataset.caseId) === caseId) {
+            cb.checked = isSelected;
+        }
+    }
+}
+
+function submitSelection() {
+    document.getElementById('form').submit();
+}
+</script>
+{% endblock %}

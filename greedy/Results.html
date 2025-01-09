@@ -1,0 +1,26 @@
+{% extends "global/Page.html" %}
+{% load static %}
+
+{% block title %}
+    Results
+{% endblock %}
+
+{% block content %}
+{% if selected_cases %}
+    <p>You selected the following cases:</p>
+    <ul>
+    {% for case in selected_cases %}
+        <li>Case #{{ case.case_id }} (Cost: {{ case.points }} points)</li>
+    {% endfor %}
+    </ul>
+    <p>You spent <strong>{{ spent_points }}</strong> points in total.</p>
+    <p>You had <strong>{{ player.budget }}</strong> initially, 
+       so you have <strong>{{ leftover }}</strong> points left.</p>
+{% else %}
+    <p>You did not select any cases.</p>
+{% endif %}
+
+<form method="post">
+    <button type="submit">Continue</button>
+</form>
+{% endblock %}

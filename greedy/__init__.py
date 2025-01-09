@@ -1,104 +1,33 @@
 from otree.api import *
-import json
 import random
-from otree.models import Session
+import json
+import io
+import csv
 
-class Constants(BaseConstants):
-    name_in_url = 'greedy_algorithm'
-    players_per_group = None  # Each participant is in their own group
-    num_rounds = 1  # This will be overridden dynamically in creating_session
+doc = """
+In this game, players start with 2000 points. They select cases. 
+They cannot exceed their budget.
+"""
+
+class C(BaseConstants):
+    NAME_IN_URL = 'greedyalgo'
+    PLAYERS_PER_GROUP = None
+    NUM_ROUNDS = 1
+
+    BID_MIN = cu(0)
+    BID_MAX = cu(10)
 
 class Subsession(BaseSubsession):
     pass
-
-def creating_session(subsession: Subsession):
-    """
-    Initializes cases and judges at the beginning of the session.
-    """
-    # Set `num_rounds` based on settings.py value and store it in `session.vars`
-    num_rounds = subsession.session.config.get('num_demo_participants', 1)
-    subsession.session.vars['num_rounds'] = num_rounds
-    
-    if subsession.round_number == 1:
-        # Initialize cases for the first round
-        cases = []
-        for i in range(5):
-            case = Case.create(
-                session=subsession.session,
-                case_id=i + 1,
-                points=random.randint(1, 10),
-                is_assigned=False
-            )
-            cases.append(case)
-        subsession.session.vars['cases'] = [case.id for case in cases]
-
-    # Create a new judge for each player for the current round
-    for player in subsession.get_players():
-        Judge.create(
-            session=subsession.session,
-            player=player,
-            judge_id=player.id + (subsession.round_number - 1) * 100
-        )
-
-def live_method(player, data):
-    action = data.get('action')
-    
-    if action == 'load':
-        # Filter only unassigned cases for load action
-        cases = Case.objects_filter(session_id=player.session.id, is_assigned=False)
-        case_list = [
-            {
-                'id': case.id,
-                'case_id': case.case_id,
-                'points': case.points,
-                'is_assigned': case.is_assigned
-            }
-            for case in cases
-        ]
-        selected_cases = player.selected_cases_list
-        return {
-            player.id_in_group: {
-                'action': 'load',
-                'cases': case_list,
-                'selected_cases': selected_cases
-            }
-        }
-    
-    elif action == 'select_case':
-        # Handle case selection
-        case_id = int(data.get('case_id'))
-        case_list = Case.objects_filter(session_id=player.session.id, id=case_id, is_assigned=False)
-        
-        if not case_list:
-            return {player.id_in_group: {'action': 'case_not_found', 'case_id': case_id}}
-        
-        case = case_list[0]
-        judge = Judge.objects_filter(session_id=player.session.id, player_id=player.id).first()
-        
-        if judge:
-            selected_cases = player.selected_cases_list
-            if case_id not in selected_cases:
-                selected_cases.append(case_id)
-                player.selected_cases_list = selected_cases
-            return {player.id_in_group: {'action': 'case_assigned', 'case_id': case_id}}
-        
-        return {player.id_in_group: {'action': 'case_unavailable', 'case_id': case_id}}
-    
-    elif action == 'unselect_case':
-        # Handle case unselection
-        case_id = int(data.get('case_id'))
-        selected_cases = player.selected_cases_list
-        
-        if case_id in selected_cases:
-            selected_cases.remove(case_id)
-            player.selected_cases_list = selected_cases
-        
-        return {player.id_in_group: {'action': 'case_unselected', 'case_id': case_id}}
 
 class Group(BaseGroup):
     pass
 
 class Player(BasePlayer):
+    # The player's total budget of points
+    budget = models.IntegerField(initial=2000)
+
+    # Holds which case IDs (from the CSV) the player selected
     selected_case_ids = models.LongStringField(blank=True, default='[]')
 
     @property
@@ -108,126 +37,312 @@ class Player(BasePlayer):
     @selected_cases_list.setter
     def selected_cases_list(self, value):
         self.selected_case_ids = json.dumps(value)
-    
+
+    username = models.StringField(blank=True)
+    password = models.StringField(blank=True)
+
+    # For Admin: Store entire CSV text
+    csv_data = models.LongStringField(blank=True)
+
+
+# If you still want the dynamic bidding fields (not strictly needed for a “greedy” approach)
+for i in range(1, 100):
+    setattr(
+        Player,
+        f"bid_case_{i}",
+        models.CurrencyField(
+            blank=True,
+            min=cu(0),
+            max=cu(10),
+            label=f"Bid for Case {i}",
+        ),
+    )
 
 class Judge(ExtraModel):
-    session = models.Link(Session)
+    subsession = models.Link(Subsession)
     player = models.Link(Player)
     judge_id = models.IntegerField()
 
 class Case(ExtraModel):
-    session = models.Link(Session)
+    subsession = models.Link(Subsession)
+    # The "case_id" here refers to the CSV column "Case_ID"
     case_id = models.IntegerField()
+    case_type = models.StringField()
+    region = models.StringField()
+    priority = models.StringField()
     points = models.IntegerField()
-    is_assigned = models.BooleanField(default=False)
-    judge = models.Link(Judge)
+    date_filled = models.StringField()
+    description = models.LongStringField()
 
-class ArrivalPage(Page):
-    @staticmethod
-    def is_displayed(player: Player):
-        return True
+    # assignment logic
+    is_assigned = models.BooleanField(default=False)
+    assigned_judge = models.Link(Judge)
+
+
+class CaseBid(ExtraModel):
+    subsession = models.Link(Subsession)
+    player = models.Link(Player)
+    case = models.Link(Case)
+    bid_amount = models.CurrencyField(min=cu(0), max=cu(10))
+
+
+def creating_session(subsession: Subsession):
+    """If you rely on role being set pre-session, you can create Judges here. 
+    But typically we do it after login in `Login.before_next_page`."""
+    for player in subsession.get_players():
+        if player.participant.vars.get('role') == 'judge':
+            Judge.create(
+                subsession=subsession,
+                player=player,
+                judge_id=player.id_in_group  
+            )
+
+
+def live_method(player, data):
+    action = data.get('action')
     
-    @staticmethod
-    def vars_for_template(player: Player):
-        # Filter only unassigned cases
-        cases = Case.filter(session=player.session, is_assigned=False)
+    if action == 'load':
+        # Return all unassigned Cases
+        cases = Case.filter(subsession=player.subsession, is_assigned=False)
+        case_list = []
+        for c in cases:
+            case_list.append({
+                'case_id': c.case_id,
+                'case_type': c.case_type,
+                'region': c.region,
+                'priority': c.priority,
+                'points': c.points,
+                'date_filled': c.date_filled,
+                'description': c.description,
+                'is_assigned': c.is_assigned
+            })
+        selected_cases = player.selected_cases_list
+
         return {
-            'cases': cases,
-            'round_number': player.subsession.round_number
+            player.id_in_group: {
+                'action': 'load',
+                'cases': case_list,
+                'selected_cases': selected_cases
+            }
         }
 
-class SelectCasesPage(Page):
+    elif action == 'select_case':
+        case_id = int(data.get('case_id'))
+        case_list = Case.filter(subsession=player.subsession, case_id=case_id)
+        if not case_list:
+            return {player.id_in_group: {'action': 'case_not_found', 'case_id': case_id}}
+
+        case = case_list[0]
+        j_list = Judge.filter(subsession=player.subsession, player=player)
+        judge = j_list[0] if j_list else None
+        
+        if not judge:
+            return {player.id_in_group: {'action': 'case_unavailable', 'case_id': case_id}}
+
+        # 1) Sum up existing selected cases
+        selected_cases = player.selected_cases_list
+        total_points_already = 0
+        for cid in selected_cases:
+            c_list2 = Case.filter(subsession=player.subsession, case_id=cid)
+            if c_list2:
+                total_points_already += c_list2[0].points
+
+        # 2) Check if adding this new case's .points exceeds player's budget
+        new_total = total_points_already + case.points
+        if new_total > player.budget:
+            # EXCEEDS BUDGET
+            return {
+                player.id_in_group: {
+                    'action': 'exceed_budget',
+                    'case_id': case_id,
+                    'excess_amount': new_total - player.budget
+                }
+            }
+        
+        # If it does not exceed budget, we can add it
+        if case_id not in selected_cases:
+            selected_cases.append(case_id)
+            player.selected_cases_list = selected_cases
+
+        return {player.id_in_group: {'action': 'case_assigned', 'case_id': case_id}}
+
+    elif action == 'unselect_case':
+        case_id = int(data.get('case_id'))
+        selected_cases = player.selected_cases_list
+        if case_id in selected_cases:
+            selected_cases.remove(case_id)
+            player.selected_cases_list = selected_cases
+        return {player.id_in_group: {'action': 'case_unselected', 'case_id': case_id}}
+
+
+class Login(Page):
+    form_model = 'player'
+    form_fields = ['username', 'password']
+
+    @staticmethod
+    def error_message(player: Player, values):
+        if not (values['username'] and values['password']):
+            return "Please enter both username and password."
+
+    @staticmethod
+    def before_next_page(player: Player, timeout_happened):
+        username = player.username
+        password = player.password
+
+        if username == "admin" and password == "admin":
+            player.participant.vars['role'] = "admin"
+        elif username.startswith("judge") and password == "judge":
+            player.participant.vars['role'] = "judge"
+            # Create the Judge record right away
+            Judge.create(
+                subsession=player.subsession,
+                player=player,
+                judge_id=player.id_in_group
+            )
+        else:
+            return ValueError
+
+
+class Admin(Page):
+    form_model = 'player'
+    form_fields = ['csv_data']
+
+    @staticmethod
+    def before_next_page(player: Player, timeout_happened):
+        data_str = player.csv_data or ""
+        if not data_str.strip():
+            return
+        f = io.StringIO(data_str)
+        reader = csv.DictReader(f, delimiter=',') 
+        num_cases = 0
+        for row in reader:
+            num_cases += 1
+            Case.create(
+                subsession=player.subsession,
+                case_id=int(row['Case_ID']),
+                case_type=row.get('Case_Type', ''),
+                region=row.get('Region', ''),
+                priority=row.get('Priority', ''),
+                points=int(row.get('Points', 0)),
+                date_filled=row.get('Date_Filled', ''),
+                description=row.get('Description', ''),
+            )
+
+        player.subsession.session.vars['num_cases'] = num_cases
+
+    @staticmethod
+    def is_displayed(player: Player):
+        return player.participant.vars.get('role') == 'admin'
+
+
+class AdminReview(Page):
+    @staticmethod
+    def is_displayed(player: Player):
+        return player.participant.vars.get('role') == 'admin'
+
+    @staticmethod
+    def vars_for_template(player: Player):
+        return {
+            'cases': Case.filter(subsession=player.subsession),
+            'num_cases': player.subsession.session.vars.get('num_cases', 0)
+        }
+
+
+class SelectCases(Page):
     live_method = live_method
     form_model = 'player'
     form_fields = ['selected_case_ids']
 
     @staticmethod
     def is_displayed(player: Player):
-        # Display SelectCasesPage if rounds are not complete
-        return player.round_number < player.session.vars['num_rounds']
+        return player.participant.vars.get('role') == 'judge'
 
     @staticmethod
-    def vars_for_template(player):
-        # Filter only unassigned cases
-        cases = list(Case.objects_filter(session_id=player.session.id, is_assigned=False))
-        for case in cases:
-            case.points += 1
-        if len(cases) < 5:
-            max_case_id = max([case.case_id for case in Case.objects_filter(session_id=player.session.id)], default=0)
-            new_cases = [
-                Case.create(
-                    session_id=player.session.id,
-                    case_id=max_case_id + i + 1,
-                    points=random.randint(1, 10),
-                    is_assigned=False
-                ) for i in range(5 - len(cases))
-            ]
-            cases.extend(new_cases)
-        player.session.vars['cases'] = [case.id for case in cases]
+    def vars_for_template(player: Player):
+        cases = list(Case.filter(subsession=player.subsession, is_assigned=False))
+        # you can mutate .points if you want to demonstrate something
+        for c in cases:
+            c.points += 1
+
         return {
-            'cases': [{'id': case.id, 'case_id': case.case_id, 'points': case.points} for case in cases],
+            'cases': [
+                {
+                    'case_id': c.case_id,
+                    'points': c.points
+                }
+                for c in cases
+            ],
             'round_number': player.subsession.round_number,
+            'budget': player.budget
         }
 
     @staticmethod
     def before_next_page(player: Player, timeout_happened):
-        """
-        Sets the selected cases to 'assigned' after submission.
-        """
-        selected_case_ids = json.loads(player.selected_case_ids or '[]')
-        current_judge = Judge.objects_filter(session_id=player.session.id, player_id=player.id).first()
+        selected_case_ids = player.selected_cases_list
+        j_list = Judge.filter(subsession=player.subsession, player=player)
+        current_judge = j_list[0] if j_list else None
 
-        # First, reset any previously assigned cases for this judge
-        previously_selected_cases = Case.objects_filter(session_id=player.session.id, judge=current_judge)
-        for case in previously_selected_cases:
-            case.is_assigned = False
-            case.judge = None
+        if not current_judge:
+            return
 
-        # Now, assign only the cases that are selected in the current submission
-        for case_id in selected_case_ids:
-            case = Case.objects_filter(session_id=player.session.id, id=case_id).first()
-            if case and not case.is_assigned:
-                case.is_assigned = True
-                case.judge = current_judge
+        # unassign old
+        old_cases = Case.filter(subsession=player.subsession, assigned_judge=current_judge)
+        for c in old_cases:
+            c.is_assigned = False
+            c.assigned_judge = None
 
-class ResultsPage(Page):
+        # assign new
+        for cid in selected_case_ids:
+            c_list = Case.filter(subsession=player.subsession, case_id=cid)
+            if c_list:
+                c = c_list[0]
+                if not c.is_assigned:
+                    c.is_assigned = True
+                    c.assigned_judge = current_judge
+
+
+class Results(Page):
     @staticmethod
     def is_displayed(player: Player):
-        return player.round_number < player.session.vars['num_rounds']
+        return player.participant.vars.get('role') == 'judge'
 
     @staticmethod
     def vars_for_template(player: Player):
-        all_cases = Case.filter(session=player.session)
-        current_judge_list = Judge.filter(session=player.session, player=player)
-        current_judge = current_judge_list[0] if current_judge_list else None
+        all_cases = Case.filter(subsession=player.subsession)
+        j_list = Judge.filter(subsession=player.subsession, player=player)
+        current_judge = j_list[0] if j_list else None
+
         if not current_judge:
             return {
                 'selected_cases': [],
                 'round_number': player.subsession.round_number,
-                'arrived': player.arrived
             }
-        selected_cases = Case.filter(session=player.session, judge=current_judge)
-        
-        # Calculate total points of selected cases
-        total_points = sum(case.points for case in selected_cases)
-        
-        # Set the player's payoff
-        player.payoff = total_points
-        
+        selected_cases = Case.filter(subsession=player.subsession, assigned_judge=current_judge)
+        spent_points = sum(c.points for c in selected_cases)
+        leftover = player.budget - spent_points
+
         case_list = [
-            {'id': case.id, 'case_id': case.case_id, 'points': case.points, 'judge_id': case.judge.judge_id}
-            for case in selected_cases
+            {
+                'case_id': c.case_id,
+                'points': c.points,
+                'judge_id': current_judge.judge_id
+            }
+            for c in selected_cases
         ]
         return {
             'all_cases': all_cases,
             'judge': current_judge,
             'selected_cases': case_list,
             'round_number': player.subsession.round_number,
-            'total_points': total_points  # For display purposes
+            'spent_points': spent_points,
+            'leftover': leftover
         }
 
+
 page_sequence = [
-    ArrivalPage,
-    SelectCasesPage,
-    ResultsPage,
+    Login,
+    Admin,
+    AdminReview,
+    SelectCases,
+    Results
 ]

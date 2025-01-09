@@ -9,7 +9,7 @@ In this game, players bid on cases. The player with the lowest bid wins the case
 """
 
 class C(BaseConstants):
-    NAME_IN_URL = 'case_assignment_auction'
+    NAME_IN_URL = 'batchalgo'
     PLAYERS_PER_GROUP = None
     NUM_ROUNDS = 1
 

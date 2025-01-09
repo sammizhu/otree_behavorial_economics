@@ -4,7 +4,7 @@ SESSION_CONFIGS = [
     dict(
         name='greedy',
         app_sequence=['greedy'],
-        num_demo_participants=5,
+        num_demo_participants=4,
     ),
     dict(
         name='batch',
@@ -19,6 +19,7 @@ SESSION_CONFIGS = [
 # e.g. self.session.config['participation_fee']
 
 OTREE_PRODUCTION=1
+ENABLE_LIVE_DEMO = True
 
 SESSION_CONFIG_DEFAULTS = dict(
     real_world_currency_per_point=1.00, participation_fee=0.00, doc=""
