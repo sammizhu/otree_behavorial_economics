@@ -24,11 +24,7 @@
         <tr>
             <td>{{ bid.case.case_id }}</td>
             <td>
-                {% if bid.bid_amount == bid_max %}
-                    Did not Bid
-                {% else %}
-                    {{ bid.bid_amount }}
-                {% endif %}
+                {{ bid.bid_amount }}
             </td>
         </tr>
         {% endfor %}

@@ -9,8 +9,7 @@ SESSION_CONFIGS = [
     dict(
         name='batch',
         app_sequence=['batch'],
-        num_demo_participants=2,
-        num_cases=6,
+        num_demo_participants=4,
     )
 ]
 
@@ -18,6 +17,8 @@ SESSION_CONFIGS = [
 # in SESSION_CONFIGS, except those that explicitly override it.
 # the session config can be accessed from methods in your apps as self.session.config,
 # e.g. self.session.config['participation_fee']
+
+OTREE_PRODUCTION=1
 
 SESSION_CONFIG_DEFAULTS = dict(
     real_world_currency_per_point=1.00, participation_fee=0.00, doc=""
