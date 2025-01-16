@@ -1,0 +1,114 @@
+{% extends "global/Page.html" %}
+{% block title %}Bid{% endblock %}
+
+{% block content %}
+<style>
+/* CSS for styling */
+.cases-container {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 20px;
+    margin-top: 20px;
+}
+
+.case-card {
+    background-color: #fff;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    overflow: hidden;
+    width: 300px;
+    text-align: left;
+}
+
+.case-card .card-header {
+    background-color: #f8f9fa;
+    padding: 10px;
+    font-weight: bold;
+    color: #333;
+    border-bottom: 1px solid #ddd;
+}
+
+.case-card .card-body {
+    padding: 15px;
+    font-size: 0.9rem;
+    color: #555;
+}
+
+.case-card .card-footer {
+    padding: 15px;
+    background-color: #f8f9fa;
+    border-top: 1px solid #ddd;
+}
+
+.card-footer label {
+    font-weight: bold;
+}
+
+.card-footer input {
+    width: 100%;
+    padding: 10px;
+    font-size: 1rem;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+}
+</style>
+
+<p>Welcome, Judge #{{ player_id_in_group }}</p>
+<p>Please make your bid now. The amount can be between {{ bid_min }} and {{ bid_max }}, inclusive.</p>
+
+<form method="post">
+    <div class="cases-container">
+        {% for case in cases %}
+        <div class="case-card">
+            <div class="card-header">
+                <h5>Case #{{ case.case_id }}</h5>
+            </div>
+            <div class="card-body">
+                <p>Case Type: {{ case.case_type }}</p>
+                <p>Region: {{ case.region }}</p>
+                <p>Priority: {{ case.priority }}</p>
+                <p>Date Filled: {{ case.date_filled }}</p>
+                <p>Description: {{ case.description }}</p>
+            </div>
+            <div class="card-footer">
+                <button type="button" class="btn btn-primary bid-toggle-btn" 
+                        data-field="{{ case.form_field_name }}">
+                    Click to Bid
+                </button>
+                <div class="bid-input-container" style="display: none;">
+                    <label for="{{ case.form_field_name }}">Your Bid:</label>
+                    {{ formfield case.form_field_name }}
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    <div class="text-center mt-4">
+        {{ next_button }}
+    </div>
+</form>
+
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        document.querySelectorAll('.bid-toggle-btn').forEach(button => {
+            button.addEventListener('click', () => {
+                const fieldName = button.dataset.field;
+                const container = button.nextElementSibling;
+                if (container.style.display === 'none') {
+                    container.style.display = 'block';
+                    button.textContent = 'Cancel Bid';
+                } else {
+                    container.style.display = 'none';
+                    button.textContent = 'Click to Bid';
+                    const inputField = container.querySelector(`input[name="${fieldName}"]`);
+                    if (inputField) {
+                        inputField.value = ''; // Reset the bid
+                    }
+                }
+            });
+        });
+    });
+</script>
+{% endblock %}

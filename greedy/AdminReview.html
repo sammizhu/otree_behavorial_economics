@@ -1,0 +1,43 @@
+{% extends "global/Page.html" %}
+{% block title %}
+    Cases Successfully Uploaded
+{% endblock %}
+
+{% block content %}
+
+<p>Total cases created: {{ num_cases }}</p>
+
+{% if cases %}
+    <table class="table table-striped">
+        <thead>
+            <tr>
+                <th>Case ID</th>
+                <th>Type</th>
+                <th>Region</th>
+                <th>Priority</th>
+                <th>Points</th>
+                <th>Date Filled</th>
+                <th>Description</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for c in cases %}
+            <tr>
+                <td>{{ c.case_id }}</td>
+                <td>{{ c.case_type }}</td>
+                <td>{{ c.region }}</td>
+                <td>{{ c.priority }}</td>
+                <td>{{ c.points }}</td>
+                <td>{{ c.date_filled }}</td>
+                <td>{{ c.description }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+{% else %}
+    <p>No cases were created.</p>
+{% endif %}
+
+{{ next_button }}
+
+{% endblock %}

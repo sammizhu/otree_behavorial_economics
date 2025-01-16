@@ -1,0 +1,47 @@
+{% extends "global/Page.html" %}
+{% load static %}
+
+{% block title %}
+  Admin Home
+{% endblock %}
+
+{% block content %}
+  <h2>Upload Case Information</h2>
+
+  <p>
+    CSV should have the following columns: 
+    Case_ID, Case_Type, Region, Priority, Points, Date_Filled, Description
+  </p>
+
+  <form method="post">
+
+    <!-- file input that copies the file's text into the textarea using JavaScript -->
+    <div class="mb-3">
+      <label>Select .csv file:</label> 
+      <input type="file" id="csvFileInput" accept=".csv" /> <br>
+      <small class="form-text text-muted">This will read the file contents into the text area below.</small>
+    </div>
+
+    <!--  text area for CSV. This is the ONLY field that gets submitted -->
+    <div class="mb-3">
+        {{ formfield 'csv_data' }}
+    </div>
+
+    <button type="submit" class="btn btn-primary">Upload CSV</button>
+</form>
+
+<script>
+    document.getElementById('csvFileInput').addEventListener('change', function(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            // Put the CSV text into the text area that is bound to 'csv_data'
+            const textArea = document.querySelector('textarea[name="csv_data"]');
+            textArea.value = e.target.result;
+        };
+        reader.readAsText(file);
+    });
+</script>
+
+{% endblock %}

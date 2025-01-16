@@ -1,0 +1,36 @@
+{% extends "global/Page.html" %}
+{% block title %}Results{% endblock %}
+{% block content %}
+    <p>Welcome, Judge #{{ player_id_in_group }}</p>
+
+    {% if assigned_cases %}
+        <p>You have been assigned the following case:</p>
+        <ul>
+            {% for case_id in assigned_cases %}
+                <li>Case {{ case_id }}</li>
+            {% endfor %}
+        </ul>
+    {% else %}
+        <p>You were not assigned any cases.</p>
+    {% endif %}
+
+    <h3>Your Bids</h3>
+    <table class="table">
+        <tr>
+            <th>Case ID</th>
+            <th>Your Bid</th>
+        </tr>
+        {% for bid in player_bids %}
+        <tr>
+            <td>{{ bid.case.case_id }}</td>
+            <td>
+                {{ bid.bid_amount }}
+            </td>
+        </tr>
+        {% endfor %}
+    </table>
+
+    <p>Your total payoff is: {{ player.player_payoff }}</p>
+
+    {{ next_button }}
+{% endblock %}
