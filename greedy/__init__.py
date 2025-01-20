@@ -99,6 +99,11 @@ def creating_session(subsession: Subsession):
 
 
 def live_method(player, data):
+    """
+    Logistic for Javascript on SelectCase.html that processes various
+    actions of what users can do on the page (i.e. selecting a case, 
+    unselecting a case, loading the case informaiton, etc).
+    """
     action = data.get('action')
     
     if action == 'load':
@@ -176,6 +181,10 @@ def live_method(player, data):
 
 
 class Login(Page):
+    """
+    Given a set of username and password, directs the user to the head of 
+    a sequence of pages.
+    """
     form_model = 'player'
     form_fields = ['username', 'password']
 
@@ -189,7 +198,7 @@ class Login(Page):
         username = player.username
         password = player.password
 
-        if username == "admin" and password == "admin":
+        if username == "admin" and password == "admin": # change here to actual usernames and passwords
             player.participant.vars['role'] = "admin"
         elif username.startswith("judge") and password == "judge":
             player.participant.vars['role'] = "judge"
@@ -204,6 +213,11 @@ class Login(Page):
 
 
 class Admin(Page):
+    """
+    Page for Admins to upload a CSV of court case information that 
+    will be saved with a preview feature on the AdminReview page for
+    Judges to select/bid for. 
+    """
     form_model = 'player'
     form_fields = ['csv_data']
 
@@ -236,6 +250,10 @@ class Admin(Page):
 
 
 class AdminReview(Page):
+    """
+    Fetches the cases uploaded in the CSV file for the Admin
+    to review as a confirmation of upload.
+    """
     @staticmethod
     def is_displayed(player: Player):
         return player.participant.vars.get('role') == 'admin'
@@ -249,6 +267,9 @@ class AdminReview(Page):
 
 
 class SelectCases(Page):
+    """
+    Greedy Algorithm 
+    """
     live_method = live_method
     form_model = 'player'
     form_fields = ['selected_case_ids']
@@ -302,6 +323,9 @@ class SelectCases(Page):
 
 
 class Results(Page):
+    """
+    Displays the outcome of each Judge after selecting cases.
+    """
     @staticmethod
     def is_displayed(player: Player):
         return player.participant.vars.get('role') == 'judge'

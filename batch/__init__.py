@@ -20,7 +20,6 @@ class C(BaseConstants):
 class Subsession(BaseSubsession):
     pass
 
-
 class Group(BaseGroup):
     pass
 
@@ -80,8 +79,7 @@ class CaseBid(ExtraModel):
 # FUNCTIONS
 def creating_session(subsession: Subsession):
     """
-    If you want to create a Judge object for every 'judge' player,
-    you can do that here.
+    Initalization of game settings.
     """
     for player in subsession.get_players():
         if player.participant.vars.get('role') == 'judge':
@@ -94,6 +92,10 @@ def creating_session(subsession: Subsession):
 
 
 def set_assignments(group: Group):
+    """
+    Logic for how to define which Judge successfully wins which bid.
+    Determined by whoever bid the lowest amount for a given case.
+    """
     subsession = group.subsession
     cases = Case.filter(subsession=subsession)
 
@@ -120,6 +122,10 @@ def set_assignments(group: Group):
 
 
 class Login(Page):
+    """
+    Given a set of username and password, directs the user to the head of 
+    a sequence of pages.
+    """
     form_model = 'player'
     form_fields = ['username', 'password']
 
@@ -148,6 +154,11 @@ class Login(Page):
 
 
 class Admin(Page):
+    """
+    Page for Admins to upload a CSV of court case information that 
+    will be saved with a preview feature on the AdminReview page for
+    Judges to select/bid for. 
+    """
     form_model = 'player'
     form_fields = ['csv_data']
 
@@ -182,6 +193,10 @@ class Admin(Page):
 
 
 class AdminReview(Page):
+    """
+    Fetches the cases uploaded in the CSV file for the Admin
+    to review as a confirmation of upload.
+    """
     @staticmethod
     def is_displayed(player: Player):
         return player.participant.vars.get('role') == 'admin'
@@ -195,6 +210,9 @@ class AdminReview(Page):
 
 
 class Bid(Page):
+    """
+    Batch Algorithm
+    """
     form_model = 'player'
 
     @staticmethod
@@ -249,6 +267,10 @@ class Bid(Page):
 
 
 class ResultsWaitPage(WaitPage):
+    """
+    Requires Judges to wait until all other Judges complete bidding before 
+    giving them the outcome of their bid.
+    """
     after_all_players_arrive = set_assignments
 
     @staticmethod
@@ -257,6 +279,10 @@ class ResultsWaitPage(WaitPage):
 
 
 class Results(Page):
+    """
+    Summary statistics page with outcome results for Judge's individualied bids,
+    along with more detailed information of points they got overall, etc.
+    """
     @staticmethod
     def is_displayed(player: Player):
         return player.participant.vars.get('role') == 'judge'

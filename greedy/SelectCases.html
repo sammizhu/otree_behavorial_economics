@@ -7,7 +7,6 @@
 
 {% block content %}
 <style>
-/* same CSS as before */
 .cases-container {
     display: flex;
     flex-wrap: wrap;
@@ -127,7 +126,7 @@ function liveRecv(data) {
         toggleCheckboxState(data.case_id, false);
     }
     else if (action === 'exceed_budget') {
-        // They tried to select a case that would exceed the budget
+        // Judge tried to select a case that would exceed the budget
         toggleCheckboxState(data.case_id, false);
         alert(`Invalid amount of points avaliable.`);
     }
